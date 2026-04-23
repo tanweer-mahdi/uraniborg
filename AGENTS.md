@@ -1,5 +1,9 @@
 # Repository Guidelines
 
+## Session Management
+At the start of a new session look into the notes/session-logs/ directory to find the latest session log and hand-off notes.
+Before closing any session/before compaction create a new timestamped session log in notes/session-logs/ directory for the next session to pick up 
+
 ## Project Structure & Module Organization
 This repository is currently spec-first. The main product definition lives in [URANIBORG_SPEC.md](URANIBORG_SPEC.md). OpenSpec workflow files live under `openspec/`:
 
