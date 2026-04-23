@@ -1,25 +1,25 @@
 ## 1. Project Foundations
 
-- [ ] 1.1 Create the initial TypeScript module layout for `src/cli`, `src/config`, `src/run`, `src/review`, `src/refine`, `src/memory`, `src/loop`, `src/ui`, and `src/types`
-- [ ] 1.2 Add or update package dependencies and scripts for the Uraniborg CLI runtime, including prompt, validation, and test tooling
-- [ ] 1.3 Implement shared path and app-home utilities for resolving `~/.uraniborg/`, vendor storage, and run storage paths
+- [x] 1.1 Create the initial TypeScript module layout for `src/cli`, `src/config`, `src/run`, `src/review`, `src/refine`, `src/memory`, `src/loop`, `src/ui`, and `src/types`
+- [x] 1.2 Add or update package dependencies and scripts for the Uraniborg CLI runtime, including prompt, validation, and test tooling
+- [x] 1.3 Implement shared path and app-home utilities for resolving `~/.uraniborg/`, vendor storage, and run storage paths
 
 ## 2. Environment Setup and Embedded Runtime Primitives
 
-- [ ] 2.1 Define the Uraniborg configuration schema and config loader for refine endpoint settings, model defaults, and env-var-backed secrets
-- [ ] 2.2 Implement bootstrap logic that prepares and validates the `~/.uraniborg/` directory layout and the pinned `~/.uraniborg/vendor/feynman` runtime without deleting prior runs
-- [ ] 2.3 Implement pinned-runtime version checks, exact-path invocation, and warnings for conflicting global `feynman` installations on `PATH`
-- [ ] 2.4 Implement pinned Feynman adapter status primitives for `--version`, `model list`, `alpha status`, and `search status`
-- [ ] 2.5 Implement pinned Feynman remediation and diagnostics primitives for `setup`, `model login <provider>`, `alpha login`, and `doctor` without mutating Feynman-owned state
-- [ ] 2.6 Implement `uraniborg init` prompts and config persistence for Uraniborg-owned refinement defaults
+- [x] 2.1 Define the Uraniborg configuration schema and config loader for refine endpoint settings, model defaults, and env-var-backed secrets
+- [x] 2.2 Implement bootstrap logic that prepares and validates the `~/.uraniborg/` directory layout and the pinned `~/.uraniborg/vendor/feynman` runtime without deleting prior runs
+- [x] 2.3 Implement pinned-runtime version checks, exact-path invocation, and warnings for conflicting global `feynman` installations on `PATH`
+- [x] 2.4 Implement pinned Feynman adapter status primitives for `--version`, `model list`, `alpha status`, and `search status`
+- [x] 2.5 Implement pinned Feynman remediation and diagnostics primitives for `setup`, `model login <provider>`, `alpha login`, and `doctor` without mutating Feynman-owned state
+- [x] 2.6 Implement `uraniborg init` prompts and config persistence for Uraniborg-owned refinement defaults
 
 ## 3. Run State and Artifact Storage
 
-- [ ] 3.1 Implement run id and slug generation plus creation of timestamped run directories
-- [ ] 3.2 Define the `run.json` manifest shape for selected models, iteration counters, phase metadata, and allowed statuses
-- [ ] 3.3 Implement safe manifest read/write and transition helpers that enforce state ownership for `initialized`, `review_running`, `review_complete`, `refine_running`, `refine_complete`, `memory_update`, `iteration_complete`, `finished`, `failed`, and `cancelled`
-- [ ] 3.4 Implement artifact-store helpers for `original.md`, `current.md`, `final.md`, `information-highway.md`, `iter-N/input.md`, `iter-N/review.md`, `iter-N/refined.md`, `iter-N/changes.md`, and per-step logs
-- [ ] 3.5 Implement run snapshot creation so each run persists resolved defaults, selected models, input metadata, and iteration count
+- [x] 3.1 Implement run id and slug generation plus creation of timestamped run directories
+- [x] 3.2 Define the `run.json` manifest shape for selected models, iteration counters, phase metadata, and allowed statuses
+- [x] 3.3 Implement safe manifest read/write and transition helpers that enforce state ownership for `initialized`, `review_running`, `review_complete`, `refine_running`, `refine_complete`, `memory_update`, `iteration_complete`, `finished`, `failed`, and `cancelled`
+- [x] 3.4 Implement artifact-store helpers for `original.md`, `current.md`, `final.md`, `information-highway.md`, `iter-N/input.md`, `iter-N/review.md`, `iter-N/refined.md`, `iter-N/changes.md`, and per-step logs
+- [x] 3.5 Implement run snapshot creation so each run persists resolved defaults, selected models, input metadata, and iteration count
 
 ## 4. Review and Refinement Engine Primitives
 
