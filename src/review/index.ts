@@ -14,6 +14,33 @@ export {
   type PinnedFeynmanRuntimeStatusCode
 } from "./feynman-bootstrap.js";
 export {
+  createNodeFeynmanInteractiveLauncher,
+  createAlphaLoginRemediationAction,
+  createModelLoginRemediationAction,
+  createSetupRemediationAction,
+  describeFeynmanRemediationAction,
+  getFeynmanRemediationCommand,
+  launchFeynmanRemediationAction,
+  runCapturedFeynmanRemediationAction,
+  type FeynmanInteractiveLauncher,
+  type FeynmanRemediationAction,
+  type FeynmanRemediationKind
+} from "./feynman-remediation.js";
+export {
+  classifyFeynmanReadiness,
+  createPinnedRuntimeReadinessCheck,
+  createRecommendedCapabilityCheck,
+  createReviewModelsReadinessCheck,
+  createSelectedReviewModelReadinessCheck,
+  parseReviewModelCatalog,
+  type ClassifyFeynmanReadinessInput,
+  type FeynmanReadinessCheck,
+  type FeynmanReadinessCheckCode,
+  type FeynmanReadinessReport,
+  type FeynmanReadinessTier,
+  type ReviewModelCatalog
+} from "./feynman-readiness.js";
+export {
   getPinnedFeynmanAlphaStatus,
   getPinnedFeynmanDoctor,
   getPinnedFeynmanModelLoginCommand,
