@@ -1,0 +1,108 @@
+import { describe, expect, it } from "vitest";
+
+import { runModelsCommand } from "../../src/cli/commands/models.js";
+import { ok } from "../../src/types/result.js";
+import type {
+  FeynmanCommandExecution,
+  PinnedFeynmanRuntimeStatus
+} from "../../src/review/index.js";
+
+describe("runModelsCommand", () => {
+  it("shows review model remediation guidance and configured refine defaults", async () => {
+    const lines: string[] = [];
+
+    await runModelsCommand({
+      interactive: false,
+      resolvePaths() {
+        return {
+          homeDirectory: "/tmp/alice",
+          appHomeDirectory: "/tmp/alice/.uraniborg",
+          configFile: "/tmp/alice/.uraniborg/config.json",
+          vendorDirectory: "/tmp/alice/.uraniborg/vendor",
+          feynmanRuntimeDirectory: "/tmp/alice/.uraniborg/vendor/feynman",
+          feynmanRuntimeManifestFile:
+            "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
+          runsDirectory: "/tmp/alice/.uraniborg/runs"
+        };
+      },
+      async inspectRuntime() {
+        return createReadyRuntimeStatus();
+      },
+      async listModels() {
+        return createExecution({
+          args: ["model", "list"],
+          exitCode: 1,
+          stdout: "",
+          stderr: "login required for openai"
+        });
+      },
+      async getAlphaStatus() {
+        return createExecution({
+          args: ["alpha", "status"],
+          stdout: "AlphaXiv ready"
+        });
+      },
+      async getSearchStatus() {
+        return createExecution({
+          args: ["search", "status"],
+          stdout: "Web search not configured"
+        });
+      },
+      async loadConfig() {
+        return ok({
+          version: 1,
+          refine: {
+            endpoint: {
+              baseUrl: "https://api.example.com/v1",
+              apiKeyEnvVar: "OPENAI_API_KEY",
+              timeoutMs: 60000
+            },
+            defaults: {
+              model: "gpt-5",
+              temperature: 0.2
+            }
+          }
+        });
+      },
+      writeLine(message) {
+        lines.push(message);
+      }
+    });
+
+    expect(lines).toContain(
+      "[fail] Review model discovery is not ready through the pinned Feynman runtime."
+    );
+    expect(lines).toContain("[ok] Default refine model: gpt-5");
+    expect(lines).toContain("Endpoint: https://api.example.com/v1");
+    expect(lines).toContain(
+      "[warn] Web search is not configured. Latest web research coverage may be weaker."
+    );
+  });
+});
+
+function createReadyRuntimeStatus(): PinnedFeynmanRuntimeStatus {
+  return {
+    ready: true,
+    code: "ready",
+    manifestPath: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
+    executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+    expectedVersion: "1.2.3",
+    detectedVersion: "1.2.3",
+    warnings: []
+  };
+}
+
+function createExecution(options: {
+  args: readonly string[];
+  stdout: string;
+  stderr?: string;
+  exitCode?: number;
+}): FeynmanCommandExecution {
+  return {
+    executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+    args: options.args,
+    exitCode: options.exitCode ?? 0,
+    stdout: options.stdout,
+    stderr: options.stderr ?? ""
+  };
+}
