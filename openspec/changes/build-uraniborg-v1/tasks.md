@@ -34,10 +34,10 @@
 
 ## 5. Readiness and Model Command Surfaces
 
-- [ ] 5.1 Implement reusable readiness classification that separates required pinned-runtime and review-model checks from recommended AlphaXiv and web-search capability checks
-- [ ] 5.2 Implement shared remediation prompting and launch flows so `doctor`, `models`, and run preflight can invoke Feynman-owned setup and login commands when appropriate
-- [ ] 5.3 Implement `uraniborg doctor` checks for filesystem readiness, pinned Feynman availability, review-model readiness, AlphaXiv status, web-search status, and refine configuration validity while surfacing richer Feynman diagnostics for humans
-- [ ] 5.4 Implement `uraniborg models` output for review-model discovery, remediation guidance when review access is missing, and configured refine-model visibility
+- [x] 5.1 Implement reusable readiness classification that separates required pinned-runtime and review-model checks from recommended AlphaXiv and web-search capability checks
+- [x] 5.2 Implement shared remediation prompting and launch flows so `doctor`, `models`, and run preflight can invoke Feynman-owned setup and login commands when appropriate
+- [x] 5.3 Implement `uraniborg doctor` checks for filesystem readiness, pinned Feynman availability, review-model readiness, AlphaXiv status, web-search status, and refine configuration validity while surfacing richer Feynman diagnostics for humans
+- [x] 5.4 Implement `uraniborg models` output for review-model discovery, remediation guidance when review access is missing, and configured refine-model visibility
 
 ## 6. Deterministic Run Execution
 
