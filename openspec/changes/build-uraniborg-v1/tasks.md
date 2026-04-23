@@ -23,14 +23,14 @@
 
 ## 4. Review and Refinement Engine Primitives
 
-- [ ] 4.1 Implement the review workspace helper that creates a fresh iteration-local Feynman workdir, deterministic input filename, isolated session directory, and exact `--cwd` / `--session-dir` / `--new-session` invocation contract
-- [ ] 4.2 Implement Uraniborg-owned iteration input creation by writing `iter-N/input.md` from `current.md` before copying it into the iteration-local Feynman workspace
-- [ ] 4.3 Implement the review execution primitive so the selected review model runs against only the iteration-local input while capturing process output into `review.log`
-- [ ] 4.4 Implement candidate review-artifact discovery inside the isolated workspace by attributing newly produced `outputs/*-review.md` files to the current invocation before any normalization step
-- [ ] 4.5 Make review execution failure-closed on non-zero Feynman exit, missing or unusable review artifact, or ambiguous artifact attribution, and persist the failure state in the manifest
-- [ ] 4.6 Implement review artifact normalization so the uniquely attributable external review is copied into Uraniborg-owned `iter-N/review.md`
-- [ ] 4.7 Implement refine prompt assembly using `CURRENT_DRAFT`, `PEER_REVIEW`, and `INFORMATION_HIGHWAY`
-- [ ] 4.8 Implement the OpenAI-compatible refinement client, response parser, and validation for `=== REFINED_DRAFT ===` and `=== CHANGE_SUMMARY ===`
+- [x] 4.1 Implement the review workspace helper that creates a fresh iteration-local Feynman workdir, deterministic input filename, isolated session directory, and exact `--cwd` / `--session-dir` / `--new-session` invocation contract
+- [x] 4.2 Implement Uraniborg-owned iteration input creation by writing `iter-N/input.md` from `current.md` before copying it into the iteration-local Feynman workspace
+- [x] 4.3 Implement the review execution primitive so the selected review model runs against only the iteration-local input while capturing process output into `review.log`
+- [x] 4.4 Implement candidate review-artifact discovery inside the isolated workspace by attributing newly produced `outputs/*-review.md` files to the current invocation before any normalization step
+- [x] 4.5 Make review execution failure-closed on non-zero Feynman exit, missing or unusable review artifact, or ambiguous artifact attribution, and persist the failure state in the manifest
+- [x] 4.6 Implement review artifact normalization so the uniquely attributable external review is copied into Uraniborg-owned `iter-N/review.md`
+- [x] 4.7 Implement refine prompt assembly using `CURRENT_DRAFT`, `PEER_REVIEW`, and `INFORMATION_HIGHWAY`
+- [x] 4.8 Implement the OpenAI-compatible refinement client, response parser, and validation for `=== REFINED_DRAFT ===` and `=== CHANGE_SUMMARY ===`
 
 ## 5. Readiness and Model Command Surfaces
 

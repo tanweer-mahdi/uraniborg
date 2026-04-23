@@ -26,3 +26,26 @@ export {
   runPinnedFeynmanModelLogin,
   runPinnedFeynmanSetup
 } from "./feynman-models.js";
+export {
+  REVIEW_OUTPUTS_DIRECTORY_NAME,
+  REVIEW_SESSION_DIRECTORY_NAME,
+  REVIEW_WORKSPACE_DIRECTORY_NAME,
+  REVIEW_WORKSPACE_INPUT_FILENAME,
+  createFreshReviewWorkspace,
+  createNodeReviewFilesystem,
+  createReviewCommandContract,
+  discoverNewReviewArtifact,
+  executeReviewAndNormalize,
+  normalizeReviewArtifact,
+  persistReviewFailure,
+  snapshotReviewArtifacts,
+  writeIterationReviewInput,
+  type ExecuteReviewInput,
+  type ReviewArtifactSnapshot,
+  type ReviewCommandContract,
+  type ReviewFailure,
+  type ReviewFailureCode,
+  type ReviewFilesystem,
+  type ReviewSuccess,
+  type ReviewWorkspacePaths
+} from "./feynman-review.js";
