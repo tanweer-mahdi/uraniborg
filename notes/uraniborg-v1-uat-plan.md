@@ -20,6 +20,54 @@ It focuses on three areas:
 2. Edge case exploration
 3. Failure mode inventory
 
+## If You Are New To This
+
+This document is the high-level test plan.
+
+If you want the practical step-by-step version, start with:
+
+- [uraniborg-v1-uat-instructions.md](./uraniborg-v1-uat-instructions.md)
+
+Use this plan as the checklist that explains:
+
+- what to test
+- why it matters
+- what counts as pass or fail
+
+## Plain-English Definitions
+
+- `UAT`
+  - User Acceptance Testing
+  - This means testing the product like a real user would, not only trusting automated tests.
+- `environment`
+  - the machine or shell setup you are testing in
+  - example: fresh home directory, broken config state, interruptible terminal
+- `runtime artifact state`
+  - the state of Uraniborg-managed files under `~/.uraniborg/`
+  - especially the pinned Feynman runtime under `~/.uraniborg/vendor/feynman`
+- `pinned runtime`
+  - the exact Feynman runtime Uraniborg is supposed to use
+  - Uraniborg should use this instead of silently using some other global `feynman` on your system
+
+## One Important Distinction
+
+The four UAT environments are about the shape of the machine or home directory.
+
+The pinned Feynman runtime under `~/.uraniborg/vendor/feynman` is not a separate environment type.
+It is a runtime artifact whose state can vary inside those environments.
+
+Use this mental model:
+
+- environment = where you are testing
+- runtime artifact state = what Uraniborg has already created or what is broken inside `~/.uraniborg/`
+
+Examples:
+
+- in `ENV-A`, the pinned runtime may be missing at the start
+- in `ENV-B`, the pinned runtime should already exist and work
+- in `ENV-C`, the pinned runtime may exist but be broken or mismatched
+- in `ENV-D`, the pinned runtime should usually already work because you are testing interruption and resume
+
 ## UAT Objectives
 
 - Confirm the first-run and repeat-run journeys are understandable, deterministic, and free of hidden setup assumptions.
@@ -40,8 +88,14 @@ It focuses on three areas:
 - Current repo state is built from the archived v1 spec set.
 - `npm run typecheck` passes.
 - `npm test` passes.
-- A real pinned Feynman runtime is available in at least one execution environment.
+- A real pinned Feynman runtime is available in at least one execution environment for live run/resume UAT.
 - A valid Uraniborg refine configuration can be supplied for at least one provider.
+
+Important clarification:
+
+- You do not need the pinned runtime to already exist in every environment before UAT starts.
+- For bootstrap testing, one of the things you are validating is whether Uraniborg can prepare or repair that runtime state.
+- For successful run/resume testing, you do need at least one environment where the pinned runtime is present and healthy.
 
 ## Exit Criteria
 
@@ -64,6 +118,23 @@ Use at least these four environments:
 | `ENV-C` | Existing app home with broken runtime or config | Validate failure clarity and remediation |
 | `ENV-D` | Interrupt-capable environment where runs can be stopped mid-phase | Validate cancellation and resume |
 
+## Runtime Artifact State Matrix
+
+This is separate from the environment list above.
+
+| State ID | Meaning | Typical environment |
+|---|---|---|
+| `RT-1` | pinned runtime missing | `ENV-A` |
+| `RT-2` | pinned runtime present and healthy | `ENV-B`, `ENV-D` |
+| `RT-3` | pinned runtime present but broken, mismatched, or unreadable | `ENV-C` |
+
+This is the easiest way to avoid confusion:
+
+- `ENV-A` asks: can Uraniborg create and bootstrap what it needs?
+- `ENV-B` asks: can Uraniborg reuse a healthy installation cleanly?
+- `ENV-C` asks: can Uraniborg fail clearly and help the user recover?
+- `ENV-D` asks: can Uraniborg stop and resume safely under interruption?
+
 ## Test Fixtures
 
 Prepare these fixtures before execution:
@@ -81,6 +152,16 @@ Prepare these fixtures before execution:
 - `fixture-runtime-conflict`
   - pinned runtime valid, conflicting global `feynman` on `PATH`
 
+If this is your first package test pass, do not try to prepare every fixture up front.
+
+Start with only:
+
+- `fixture-idea-minimal.md`
+- one real medium draft if you have it
+- one non-Markdown invalid file
+
+You can create the more advanced broken-state fixtures later.
+
 ## Evidence To Capture
 
 For every UAT case, capture:
@@ -91,6 +172,19 @@ For every UAT case, capture:
 - `review.log` and `refine.log` when relevant
 - exact user-facing error or warning text
 - pass/fail decision and defect reference if failed
+
+If this is your first pass, a simple text file or note is enough.
+
+Example:
+
+```text
+Case: UJ-01
+Env: ENV-A / RT-1
+Command: node dist/src/cli/main.js doctor
+Result: pass
+Notes: Created ~/.uraniborg. Reported missing refine config clearly.
+Artifacts: none yet
+```
 
 ## User Journey Hygiene
 
@@ -120,6 +214,17 @@ The priority here is not just functional success. The flow must be legible, non-
 | `UJ-09` | P0 | History discoverability | Run `uraniborg history` with multiple prior runs | Lists run id, timestamp, and state accurately for `initialized`, in-progress, `finished`, `failed`, and `cancelled` runs |
 | `UJ-10` | P1 | Repeat-run hygiene | Run a second successful draft through the same app home | Reuses app home cleanly without mutating or deleting prior runs |
 
+Recommended beginner order:
+
+1. `UJ-01`
+2. `UJ-02`
+3. `UJ-06`
+4. `UJ-03`
+5. `UJ-09`
+6. `UJ-08`
+
+That gets you to a useful first pass without needing the full matrix immediately.
+
 ### Explicit Hygiene Checks
 
 Run these checks during every P0 journey:
@@ -140,6 +245,11 @@ Run these checks during every P0 journey:
 ## Edge Case Exploration
 
 This section is intentionally exploratory. The goal is to surface brittle assumptions before users do.
+
+If you are new to UAT, do not start here.
+
+First get one clean successful run working.
+Then come back to the edge cases one group at a time.
 
 ### Input And Setup Edge Cases
 
@@ -212,6 +322,14 @@ This inventory is the operator-facing failure map. Every item should be observed
 | Resume state mismatch | Terminal state not resumable | Reject explicitly with reason | P0 | terminal output |
 | History inspection | No runs or corrupt run entries | Empty case must not crash; corrupt entries should be triaged if observed | P1 | command output |
 
+For a beginner-friendly first pass, focus first on these failure modes:
+
+1. missing refine config
+2. missing or broken pinned runtime
+3. non-Markdown input
+4. failed review-model discovery
+5. interruption and resume
+
 ## Manual UAT Execution Order
 
 Run the plan in this order:
@@ -228,6 +346,18 @@ Run the plan in this order:
    - validates recovery and history behavior
 6. Failure-mode review
    - map observed results back into the inventory above
+
+If this is your very first run through the product, use this simpler order instead:
+
+1. Build and basic validation
+2. `doctor`
+3. `init`
+4. `models`
+5. one successful `run`
+6. `history`
+7. one interruption and one `resume`
+8. one invalid-input case
+9. one broken-runtime case
 
 ## Defect Triage Rules
 
@@ -258,3 +388,11 @@ Run the plan in this order:
 - Real pinned-runtime validation still needs live confirmation because current automated coverage uses test doubles rather than a real embedded Feynman install.
 - Real provider-login and remediation launches need human verification for UX quality, not just command correctness.
 - Large-draft behavior and long-running interruption timing should be exercised manually, because automated tests currently cover behavior shape rather than latency/stress characteristics.
+
+## Best Next Step
+
+If you have never tested a Node package before, do this:
+
+1. open [uraniborg-v1-uat-instructions.md](./uraniborg-v1-uat-instructions.md)
+2. follow it exactly through the first successful run
+3. only after that, come back to this plan and mark off additional cases
