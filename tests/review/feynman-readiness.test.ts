@@ -7,7 +7,7 @@ import {
 } from "../../src/review/feynman-readiness.js";
 import type {
   FeynmanCommandExecution,
-  PinnedFeynmanRuntimeStatus
+  FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 
 describe("classifyFeynmanReadiness", () => {
@@ -38,7 +38,7 @@ describe("classifyFeynmanReadiness", () => {
     expect(report.checks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: "pinned_runtime",
+          code: "runtime",
           tier: "required",
           ready: true
         }),
@@ -90,13 +90,12 @@ describe("classifyFeynmanReadiness", () => {
     );
   });
 
-  it("turns a runtime failure into a blocking required check with setup remediation", () => {
-    const runtimeStatus: PinnedFeynmanRuntimeStatus = {
+  it("turns a missing runtime into a blocking required check", () => {
+    const runtimeStatus: FeynmanRuntimeStatus = {
       ready: false,
-      code: "manifest_missing",
-      manifestPath: "/tmp/.uraniborg/vendor/feynman/runtime.json",
-      executablePath: "/tmp/.uraniborg/vendor/feynman/bin/feynman",
-      warnings: []
+      code: "runtime_missing",
+      warnings: [],
+      candidates: []
     };
 
     const report = classifyFeynmanReadiness({
@@ -106,12 +105,9 @@ describe("classifyFeynmanReadiness", () => {
     expect(report.requiredReady).toBe(false);
     expect(report.checks).toEqual([
       expect.objectContaining({
-        code: "pinned_runtime",
+        code: "runtime",
         tier: "required",
-        ready: false,
-        remediation: expect.objectContaining({
-          kind: "setup"
-        })
+        ready: false
       })
     ]);
   });
@@ -178,15 +174,21 @@ describe("classifyFeynmanReadiness", () => {
   });
 });
 
-function createReadyRuntimeStatus(): PinnedFeynmanRuntimeStatus {
+function createReadyRuntimeStatus(): FeynmanRuntimeStatus {
   return {
     ready: true,
     code: "ready",
-    manifestPath: "/tmp/.uraniborg/vendor/feynman/runtime.json",
     executablePath: "/tmp/.uraniborg/vendor/feynman/bin/feynman",
-    expectedVersion: "1.2.3",
     detectedVersion: "1.2.3",
-    warnings: []
+    warnings: [],
+    candidates: [
+      {
+        executablePath: "/tmp/.uraniborg/vendor/feynman/bin/feynman",
+        compatible: true,
+        detectedVersion: "1.2.3",
+        details: ["Version: 1.2.3"]
+      }
+    ]
   };
 }
 

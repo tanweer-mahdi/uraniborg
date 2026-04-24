@@ -10,7 +10,7 @@ import {
   resolveIterationArtifactPaths,
   resolveRunArtifactPaths
 } from "../../src/run/artifact-store.js";
-import type { PinnedFeynmanRuntimeStatus } from "../../src/review/index.js";
+import type { FeynmanRuntimeStatus } from "../../src/review/index.js";
 import { ok } from "../../src/types/result.js";
 
 describe("runResumeCommand", () => {
@@ -143,21 +143,21 @@ Reason: Not available
             }
           });
         },
-        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+        async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
             code: "ready",
-            manifestPath: path.join(
-              homeDirectory,
-              ".uraniborg",
-              "vendor",
-              "feynman",
-              "runtime.json"
-            ),
             executablePath: "/tmp/feynman",
-            expectedVersion: "1.2.3",
             detectedVersion: "1.2.3",
-            warnings: []
+            warnings: [],
+            candidates: [
+              {
+                executablePath: "/tmp/feynman",
+                compatible: true,
+                detectedVersion: "1.2.3",
+                details: ["Version: 1.2.3"]
+              }
+            ]
           };
         },
         async listModels() {
@@ -401,21 +401,21 @@ Reason: Not available
               }
             });
           },
-          async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+          async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return {
               ready: true,
               code: "ready",
-              manifestPath: path.join(
-                homeDirectory,
-                ".uraniborg",
-                "vendor",
-                "feynman",
-                "runtime.json"
-              ),
               executablePath: "/tmp/feynman",
-              expectedVersion: "1.2.3",
               detectedVersion: "1.2.3",
-              warnings: []
+              warnings: [],
+              candidates: [
+                {
+                  executablePath: "/tmp/feynman",
+                  compatible: true,
+                  detectedVersion: "1.2.3",
+                  details: ["Version: 1.2.3"]
+                }
+              ]
             };
           },
           async listModels() {
@@ -604,21 +604,21 @@ Reason: Not available
             }
           });
         },
-        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+        async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
             code: "ready",
-            manifestPath: path.join(
-              homeDirectory,
-              ".uraniborg",
-              "vendor",
-              "feynman",
-              "runtime.json"
-            ),
             executablePath: "/tmp/feynman",
-            expectedVersion: "1.2.3",
             detectedVersion: "1.2.3",
-            warnings: []
+            warnings: [],
+            candidates: [
+              {
+                executablePath: "/tmp/feynman",
+                compatible: true,
+                detectedVersion: "1.2.3",
+                details: ["Version: 1.2.3"]
+              }
+            ]
           };
         },
         async listModels() {
@@ -813,21 +813,21 @@ Reason: Not available
             }
           });
         },
-        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+        async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
             code: "ready",
-            manifestPath: path.join(
-              homeDirectory,
-              ".uraniborg",
-              "vendor",
-              "feynman",
-              "runtime.json"
-            ),
             executablePath: "/tmp/feynman",
-            expectedVersion: "1.2.3",
             detectedVersion: "1.2.3",
-            warnings: []
+            warnings: [],
+            candidates: [
+              {
+                executablePath: "/tmp/feynman",
+                compatible: true,
+                detectedVersion: "1.2.3",
+                details: ["Version: 1.2.3"]
+              }
+            ]
           };
         },
         async listModels() {

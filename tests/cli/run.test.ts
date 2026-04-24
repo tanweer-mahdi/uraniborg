@@ -14,7 +14,7 @@ import { createOperationCancelledError } from "../../src/types/cancellation.js";
 import type {
   FeynmanCommandExecution,
   FeynmanCommandRunner,
-  PinnedFeynmanRuntimeStatus
+  FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 import { ok } from "../../src/types/result.js";
 
@@ -93,21 +93,21 @@ describe("runRunCommand", () => {
             }
           });
         },
-        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+        async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
             code: "ready",
-            manifestPath: path.join(
-              homeDirectory,
-              ".uraniborg",
-              "vendor",
-              "feynman",
-              "runtime.json"
-            ),
             executablePath: "/tmp/feynman",
-            expectedVersion: "1.2.3",
             detectedVersion: "1.2.3",
-            warnings: []
+            warnings: [],
+            candidates: [
+              {
+                executablePath: "/tmp/feynman",
+                compatible: true,
+                detectedVersion: "1.2.3",
+                details: ["Version: 1.2.3"]
+              }
+            ]
           };
         },
         async listModels() {
@@ -321,21 +321,21 @@ Reason: Unsupported by available material
               }
             });
           },
-          async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+          async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return {
               ready: true,
               code: "ready",
-              manifestPath: path.join(
-                homeDirectory,
-                ".uraniborg",
-                "vendor",
-                "feynman",
-                "runtime.json"
-              ),
               executablePath: "/tmp/feynman",
-              expectedVersion: "1.2.3",
               detectedVersion: "1.2.3",
-              warnings: []
+              warnings: [],
+              candidates: [
+                {
+                  executablePath: "/tmp/feynman",
+                  compatible: true,
+                  detectedVersion: "1.2.3",
+                  details: ["Version: 1.2.3"]
+                }
+              ]
             };
           },
           async listModels() {
@@ -447,7 +447,7 @@ Reason: Unsupported by available material
         async loadConfig() {
           return ok(createResolvedConfig());
         },
-        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+        async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return createReadyRuntimeStatus(homeDirectory);
         },
         async listModels() {
@@ -605,116 +605,99 @@ Reason: Unsupported by available material
 });
 
 describe("prepareRunEnvironment", () => {
-  it("launches pinned-runtime remediation for required version mismatches and rechecks readiness", async () => {
+  it("reports incompatible runtime failures without launching remediation", async () => {
     const lines: string[] = [];
     const launchedCommands: Array<{
       executablePath: string;
       args: readonly string[];
     }> = [];
-    const prompts = createInteractivePrompts([true]);
-    let runtimeInspectionCount = 0;
-
-    const prepared = await prepareRunEnvironment(
-      {
-        reviewModel: "openai/gpt-5.4",
-        refineModel: "gpt-5.4"
-      },
-      {
-        environment: {
-          OPENAI_API_KEY: "secret"
+    await expect(
+      prepareRunEnvironment(
+        {
+          reviewModel: "openai/gpt-5.4",
+          refineModel: "gpt-5.4"
         },
-        interactive: true,
-        prompts,
-        resolvePaths() {
-          return createPaths("/tmp/alice");
-        },
-        async ensureAppHome(paths) {
-          return {
-            paths,
-            appHome: {
-              kind: "directory",
-              path: paths.appHomeDirectory
-            },
-            vendor: {
-              kind: "directory",
-              path: paths.vendorDirectory
-            },
-            feynmanRuntime: {
-              kind: "directory",
-              path: paths.feynmanRuntimeDirectory
-            },
-            runs: {
-              kind: "directory",
-              path: paths.runsDirectory
-            },
-            isLayoutValid: true
-          };
-        },
-        async loadConfig() {
-          return ok(createResolvedConfig());
-        },
-        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
-          runtimeInspectionCount += 1;
-
-          return runtimeInspectionCount === 1
-            ? {
-                ready: false,
-                code: "version_mismatch",
-                manifestPath: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
-                executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
-                expectedVersion: "1.2.3",
-                detectedVersion: "9.9.9",
-                warnings: []
-              }
-            : createReadyRuntimeStatus("/tmp/alice");
-        },
-        async listModels() {
-          return createExecution({
-            args: ["model", "list"],
-            stdout: JSON.stringify(["openai/gpt-5.4"])
-          });
-        },
-        async getAlphaStatus() {
-          return createExecution({
-            args: ["alpha", "status"],
-            stdout: "AlphaXiv ready"
-          });
-        },
-        async getSearchStatus() {
-          return createExecution({
-            args: ["search", "status"],
-            stdout: "Web search ready"
-          });
-        },
-        runner: createReviewRunner(),
-        launcher: {
-          async launch(executablePath, args) {
-            launchedCommands.push({
-              executablePath,
-              args
-            });
-
+        {
+          environment: {
+            OPENAI_API_KEY: "secret"
+          },
+          interactive: true,
+          prompts: createInteractivePrompts([true]),
+          resolvePaths() {
+            return createPaths("/tmp/alice");
+          },
+          async ensureAppHome(paths) {
             return {
-              exitCode: 0
+              paths,
+              appHome: {
+                kind: "directory",
+                path: paths.appHomeDirectory
+              },
+              vendor: {
+                kind: "directory",
+                path: paths.vendorDirectory
+              },
+              feynmanRuntime: {
+                kind: "directory",
+                path: paths.feynmanRuntimeDirectory
+              },
+              runs: {
+                kind: "directory",
+                path: paths.runsDirectory
+              },
+              isLayoutValid: true
             };
-          }
-        },
-        writeLine(message) {
-          lines.push(message);
-        }
-      }
-    );
+          },
+          async loadConfig() {
+            return ok(createResolvedConfig());
+          },
+          async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
+            return {
+              ready: false,
+              code: "runtime_incompatible",
+              warnings: [],
+              candidates: [
+                {
+                  executablePath: "/tmp/alice/.local/bin/feynman",
+                  compatible: false,
+                  failureCode: "version_unreadable",
+                  details: ["Exit code: 0", "stdout: not-a-version"]
+                }
+              ]
+            };
+          },
+          async listModels() {
+            throw new Error("listModels should not run when runtime is incompatible");
+          },
+          async getAlphaStatus() {
+            throw new Error("getAlphaStatus should not run when runtime is incompatible");
+          },
+          async getSearchStatus() {
+            throw new Error("getSearchStatus should not run when runtime is incompatible");
+          },
+          runner: createReviewRunner(),
+          launcher: {
+            async launch(executablePath, args) {
+              launchedCommands.push({
+                executablePath,
+                args
+              });
 
-    expect(prepared.runtimeStatus.ready).toBe(true);
-    expect(runtimeInspectionCount).toBe(2);
-    expect(launchedCommands).toEqual([
-      {
-        executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
-        args: ["setup"]
-      }
-    ]);
-    expect(lines).toContain(
-      "Launching feynman setup via pinned runtime..."
+              return {
+                exitCode: 0
+              };
+            }
+          },
+          writeLine(message) {
+            lines.push(message);
+          }
+        }
+      )
+    ).rejects.toThrow("Discovered Feynman runtimes are incompatible with Uraniborg.");
+
+    expect(launchedCommands).toEqual([]);
+    expect(lines).not.toContain(
+      "Launching feynman setup via the selected Feynman runtime..."
     );
   });
 
@@ -761,7 +744,7 @@ describe("prepareRunEnvironment", () => {
         async loadConfig() {
           return ok(createResolvedConfig());
         },
-        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+        async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return createReadyRuntimeStatus("/tmp/alice");
         },
         async listModels() {
@@ -828,17 +811,10 @@ function createExecution(options: {
 
 function createReadyRuntimeStatus(
   homeDirectory: string
-): PinnedFeynmanRuntimeStatus {
+): FeynmanRuntimeStatus {
   return {
     ready: true,
     code: "ready",
-    manifestPath: path.join(
-      homeDirectory,
-      ".uraniborg",
-      "vendor",
-      "feynman",
-      "runtime.json"
-    ),
     executablePath: path.join(
       homeDirectory,
       ".uraniborg",
@@ -847,9 +823,23 @@ function createReadyRuntimeStatus(
       "bin",
       "feynman"
     ),
-    expectedVersion: "1.2.3",
     detectedVersion: "1.2.3",
-    warnings: []
+    warnings: [],
+    candidates: [
+      {
+        executablePath: path.join(
+          homeDirectory,
+          ".uraniborg",
+          "vendor",
+          "feynman",
+          "bin",
+          "feynman"
+        ),
+        compatible: true,
+        detectedVersion: "1.2.3",
+        details: ["Version: 1.2.3"]
+      }
+    ]
   };
 }
 

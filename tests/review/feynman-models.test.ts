@@ -1,24 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  getPinnedFeynmanAlphaStatus,
-  getPinnedFeynmanDoctor,
-  getPinnedFeynmanModelLoginCommand,
-  getPinnedFeynmanSearchStatus,
-  getPinnedFeynmanSetupCommand,
-  getPinnedFeynmanVersion,
-  listPinnedFeynmanModels,
-  runPinnedFeynmanAlphaLogin,
-  runPinnedFeynmanDoctor,
-  runPinnedFeynmanModelLogin,
-  runPinnedFeynmanSetup
+  getFeynmanAlphaStatus,
+  getFeynmanDoctorCommand,
+  getFeynmanModelLoginCommand,
+  getFeynmanSearchStatus,
+  getFeynmanSetupCommand,
+  getFeynmanVersion,
+  listFeynmanModels,
+  runFeynmanAlphaLogin,
+  runFeynmanDoctor,
+  runFeynmanModelLogin,
+  runFeynmanSetup
 } from "../../src/review/feynman-models.js";
 import type {
   FeynmanCommandExecution,
   FeynmanCommandRunner
 } from "../../src/review/feynman-bootstrap.js";
 
-describe("pinned feynman status primitives", () => {
+describe("feynman status primitives", () => {
   it("invoke the exact executable path with the expected arguments", async () => {
     const calls: Array<{ executablePath: string; args: readonly string[] }> = [];
     const runner: FeynmanCommandRunner = {
@@ -40,16 +40,16 @@ describe("pinned feynman status primitives", () => {
         };
       }
     };
-    const executablePath = "/tmp/vendor/feynman/bin/feynman";
+    const executablePath = "/usr/local/bin/feynman";
 
-    await getPinnedFeynmanVersion(executablePath, runner);
-    await listPinnedFeynmanModels(executablePath, runner);
-    await getPinnedFeynmanAlphaStatus(executablePath, runner);
-    await getPinnedFeynmanSearchStatus(executablePath, runner);
-    await runPinnedFeynmanSetup(executablePath, runner);
-    await runPinnedFeynmanModelLogin(executablePath, "openai", runner);
-    await runPinnedFeynmanAlphaLogin(executablePath, runner);
-    await runPinnedFeynmanDoctor(executablePath, runner);
+    await getFeynmanVersion(executablePath, runner);
+    await listFeynmanModels(executablePath, runner);
+    await getFeynmanAlphaStatus(executablePath, runner);
+    await getFeynmanSearchStatus(executablePath, runner);
+    await runFeynmanSetup(executablePath, runner);
+    await runFeynmanModelLogin(executablePath, "openai", runner);
+    await runFeynmanAlphaLogin(executablePath, runner);
+    await runFeynmanDoctor(executablePath, runner);
 
     expect(calls).toEqual([
       {
@@ -88,12 +88,12 @@ describe("pinned feynman status primitives", () => {
   });
 
   it("exposes stable remediation command builders", () => {
-    expect(getPinnedFeynmanSetupCommand()).toEqual(["setup"]);
-    expect(getPinnedFeynmanModelLoginCommand("anthropic")).toEqual([
+    expect(getFeynmanSetupCommand()).toEqual(["setup"]);
+    expect(getFeynmanModelLoginCommand("anthropic")).toEqual([
       "model",
       "login",
       "anthropic"
     ]);
-    expect(getPinnedFeynmanDoctor()).toEqual(["doctor"]);
+    expect(getFeynmanDoctorCommand()).toEqual(["doctor"]);
   });
 });

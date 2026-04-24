@@ -4,7 +4,7 @@ import { runModelsCommand } from "../../src/cli/commands/models.js";
 import { ok } from "../../src/types/result.js";
 import type {
   FeynmanCommandExecution,
-  PinnedFeynmanRuntimeStatus
+  FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 
 describe("runModelsCommand", () => {
@@ -70,7 +70,7 @@ describe("runModelsCommand", () => {
     });
 
     expect(lines).toContain(
-      "[fail] Review model discovery is not ready through the pinned Feynman runtime."
+      "[fail] Review model discovery is not ready through the selected Feynman runtime."
     );
     expect(lines).toContain("[ok] Default refine model: gpt-5");
     expect(lines).toContain("Endpoint: https://api.example.com/v1");
@@ -80,15 +80,21 @@ describe("runModelsCommand", () => {
   });
 });
 
-function createReadyRuntimeStatus(): PinnedFeynmanRuntimeStatus {
+function createReadyRuntimeStatus(): FeynmanRuntimeStatus {
   return {
     ready: true,
     code: "ready",
-    manifestPath: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
     executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
-    expectedVersion: "1.2.3",
     detectedVersion: "1.2.3",
-    warnings: []
+    warnings: [],
+    candidates: [
+      {
+        executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+        compatible: true,
+        detectedVersion: "1.2.3",
+        details: ["Version: 1.2.3"]
+      }
+    ]
   };
 }
 

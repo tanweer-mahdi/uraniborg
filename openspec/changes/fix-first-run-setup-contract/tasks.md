@@ -1,8 +1,8 @@
 ## 1. Runtime Contract Revision
 
-- [ ] 1.1 Replace pinned-runtime-only assumptions in setup, doctor, models, and run-preflight modules with compatible Feynman runtime discovery
-- [ ] 1.2 Implement compatibility validation and deterministic runtime selection when one or more `feynman` installations are available, and report the exact runtime Uraniborg selected
-- [ ] 1.3 Update review-side remediation flows so missing or incompatible Feynman is reported without attempting to launch a Uraniborg-managed binary path
+- [x] 1.1 Replace pinned-runtime-only assumptions in setup, doctor, models, and run-preflight modules with compatible Feynman runtime discovery
+- [x] 1.2 Implement compatibility validation and deterministic runtime selection when one or more `feynman` installations are available, and report the exact runtime Uraniborg selected
+- [x] 1.3 Update review-side remediation flows so missing or incompatible Feynman is reported without attempting to launch a Uraniborg-managed binary path
 
 ## 2. Refinement Setup Redesign
 

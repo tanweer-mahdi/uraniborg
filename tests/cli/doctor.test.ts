@@ -4,7 +4,7 @@ import { runDoctorCommand } from "../../src/cli/commands/doctor.js";
 import { ok } from "../../src/types/result.js";
 import type {
   FeynmanCommandExecution,
-  PinnedFeynmanRuntimeStatus
+  FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
 
@@ -120,15 +120,21 @@ function createAppHomeStatus(): UraniborgAppHomeStatus {
   };
 }
 
-function createReadyRuntimeStatus(): PinnedFeynmanRuntimeStatus {
+function createReadyRuntimeStatus(): FeynmanRuntimeStatus {
   return {
     ready: true,
     code: "ready",
-    manifestPath: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
     executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
-    expectedVersion: "1.2.3",
     detectedVersion: "1.2.3",
-    warnings: []
+    warnings: [],
+    candidates: [
+      {
+        executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+        compatible: true,
+        detectedVersion: "1.2.3",
+        details: ["Version: 1.2.3"]
+      }
+    ]
   };
 }
 
