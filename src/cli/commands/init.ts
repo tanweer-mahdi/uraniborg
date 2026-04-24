@@ -15,6 +15,20 @@ import {
 } from "../../config/index.js";
 import type { UraniborgConfig } from "../../types/app-config.js";
 
+export interface InitCommandDependencies {
+  resolvePaths?: typeof resolveUraniborgPaths;
+  ensureAppHome?: typeof ensureUraniborgAppHome;
+  loadConfig?: typeof loadParsedUraniborgConfig;
+  saveConfig?: typeof saveUraniborgConfig;
+  prompts?: {
+    intro: typeof intro;
+    outro: typeof outro;
+    cancel: typeof cancel;
+    text: typeof text;
+    isCancel: typeof isCancel;
+  };
+}
+
 export function registerInitCommand(program: Command): void {
   program
     .command("init")
@@ -24,109 +38,95 @@ export function registerInitCommand(program: Command): void {
     });
 }
 
-export async function runInitCommand(): Promise<void> {
-  const paths = resolveUraniborgPaths();
-  await ensureUraniborgAppHome(paths);
+export async function runInitCommand(
+  dependencies: InitCommandDependencies = {}
+): Promise<void> {
+  const resolvePaths = dependencies.resolvePaths ?? resolveUraniborgPaths;
+  const ensureAppHome = dependencies.ensureAppHome ?? ensureUraniborgAppHome;
+  const loadConfig = dependencies.loadConfig ?? loadParsedUraniborgConfig;
+  const saveConfig = dependencies.saveConfig ?? saveUraniborgConfig;
+  const prompts = dependencies.prompts ?? {
+    intro,
+    outro,
+    cancel,
+    text,
+    isCancel
+  };
+  const paths = resolvePaths();
+  await ensureAppHome(paths);
 
-  const existingConfig = await loadExistingConfig(paths.configFile);
+  const existingConfig = await loadExistingConfig(paths.configFile, loadConfig);
   const initialConfig = existingConfig ?? createDefaultConfig();
 
-  intro("Uraniborg refinement setup");
+  prompts.intro("Uraniborg refinement setup");
 
-  const baseUrl = await promptText({
-    message: "OpenAI-compatible refine endpoint URL",
-    initialValue: initialConfig.refine.endpoint.baseUrl,
-    validate(value) {
-      try {
-        new URL(value);
-        return undefined;
-      } catch {
-        return "Enter a valid absolute URL.";
+  const baseUrl = await promptText(
+    {
+      message: "OpenAI-compatible refine endpoint URL",
+      initialValue: initialConfig.refine.endpoint.baseUrl,
+      validate(value) {
+        try {
+          new URL(value);
+          return undefined;
+        } catch {
+          return "Enter a valid absolute URL.";
+        }
       }
-    }
-  });
-  const apiKeyEnvVar = await promptText({
-    message: "Environment variable that stores the refine API key",
-    initialValue: initialConfig.refine.endpoint.apiKeyEnvVar,
-    validate(value) {
-      return value.trim().length > 0
-        ? undefined
-        : "Enter the environment variable name for the API key.";
-    }
-  });
-  const timeoutMs = await promptText({
-    message: "Request timeout in milliseconds",
-    initialValue: String(initialConfig.refine.endpoint.timeoutMs),
-    validate(value) {
-      const parsedValue = Number.parseInt(value, 10);
-      return Number.isInteger(parsedValue) && parsedValue > 0
-        ? undefined
-        : "Enter a positive integer timeout in milliseconds.";
-    }
-  });
-  const model = await promptText({
-    message: "Default refinement model",
-    initialValue: initialConfig.refine.defaults.model,
-    validate(value) {
-      return value.trim().length > 0
-        ? undefined
-        : "Enter the default refinement model name.";
-    }
-  });
-  const temperature = await promptText({
-    message: "Default refinement temperature",
-    initialValue: String(initialConfig.refine.defaults.temperature),
-    validate(value) {
-      const parsedValue = Number.parseFloat(value);
-      return Number.isFinite(parsedValue) && parsedValue >= 0 && parsedValue <= 2
-        ? undefined
-        : "Enter a number between 0 and 2.";
-    }
-  });
-  const maxOutputTokens = await promptText({
-    message: "Default max output tokens (leave empty to disable)",
-    initialValue:
-      typeof initialConfig.refine.defaults.maxOutputTokens === "number"
-        ? String(initialConfig.refine.defaults.maxOutputTokens)
-        : "",
-    validate(value) {
-      if (value.trim().length === 0) {
-        return undefined;
+    },
+    prompts
+  );
+  const apiKey = await promptText(
+    {
+      message: "Refine API key",
+      initialValue: initialConfig.refine.endpoint.apiKey ?? "",
+      validate(value) {
+        return value.trim().length > 0
+          ? undefined
+          : "Enter the API key Uraniborg should use for refinement.";
       }
-
-      const parsedValue = Number.parseInt(value, 10);
-      return Number.isInteger(parsedValue) && parsedValue > 0
-        ? undefined
-        : "Enter a positive integer or leave the field empty.";
-    }
-  });
+    },
+    prompts
+  );
+  const model = await promptText(
+    {
+      message: "Default refinement model",
+      initialValue: initialConfig.refine.defaults.model,
+      validate(value) {
+        return value.trim().length > 0
+          ? undefined
+          : "Enter the default refinement model name.";
+      }
+    },
+    prompts
+  );
 
   const nextConfig: UraniborgConfig = {
     version: 1,
     refine: {
       endpoint: {
         baseUrl,
-        apiKeyEnvVar,
-        timeoutMs: Number.parseInt(timeoutMs, 10)
+        apiKey,
+        timeoutMs: initialConfig.refine.endpoint.timeoutMs
       },
       defaults: {
         model,
-        temperature: Number.parseFloat(temperature),
-        ...(maxOutputTokens.trim().length > 0
-          ? { maxOutputTokens: Number.parseInt(maxOutputTokens, 10) }
+        temperature: initialConfig.refine.defaults.temperature,
+        ...(typeof initialConfig.refine.defaults.maxOutputTokens === "number"
+          ? { maxOutputTokens: initialConfig.refine.defaults.maxOutputTokens }
           : {})
       }
     }
   };
 
-  await saveUraniborgConfig(paths.configFile, nextConfig);
-  outro(`Saved Uraniborg config to ${paths.configFile}`);
+  await saveConfig(paths.configFile, nextConfig);
+  prompts.outro(`Saved Uraniborg config to ${paths.configFile}`);
 }
 
 async function loadExistingConfig(
-  configFilePath: string
+  configFilePath: string,
+  loadConfig: typeof loadParsedUraniborgConfig
 ): Promise<UraniborgConfig | null> {
-  const result = await loadParsedUraniborgConfig(configFilePath);
+  const result = await loadConfig(configFilePath);
 
   if (result.ok) {
     return result.value;
@@ -145,7 +145,7 @@ function createDefaultConfig(): UraniborgConfig {
     refine: {
       endpoint: {
         baseUrl: "https://api.openai.com/v1",
-        apiKeyEnvVar: "OPENAI_API_KEY",
+        apiKey: "",
         timeoutMs: 60000
       },
       defaults: {
@@ -156,19 +156,22 @@ function createDefaultConfig(): UraniborgConfig {
   };
 }
 
-async function promptText(options: {
-  message: string;
-  initialValue: string;
-  validate: (value: string) => string | undefined;
-}): Promise<string> {
-  const response = await text({
+async function promptText(
+  options: {
+    message: string;
+    initialValue: string;
+    validate: (value: string) => string | undefined;
+  },
+  prompts: NonNullable<InitCommandDependencies["prompts"]>
+): Promise<string> {
+  const response = await prompts.text({
     message: options.message,
     defaultValue: options.initialValue,
     validate: options.validate
   });
 
-  if (isCancel(response)) {
-    cancel("Uraniborg init cancelled.");
+  if (prompts.isCancel(response)) {
+    prompts.cancel("Uraniborg init cancelled.");
     throw new Error("Uraniborg init cancelled.");
   }
 
