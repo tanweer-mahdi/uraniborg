@@ -31,10 +31,11 @@ export async function runInitCommand(): Promise<void> {
   const existingConfig = await loadExistingConfig(paths.configFile);
   const initialConfig = existingConfig ?? createDefaultConfig();
 
-  intro("Uraniborg refinement setup");
+  intro("Configure draft revision settings for peer-review-based revisions");
 
   const baseUrl = await promptText({
-    message: "OpenAI-compatible refine endpoint URL",
+    message:
+      "Base URL for the OpenAI-compatible API Uraniborg will use to revise drafts from peer reviews (example: https://api.openai.com/v1)",
     initialValue: initialConfig.refine.endpoint.baseUrl,
     validate(value) {
       try {
@@ -65,7 +66,7 @@ export async function runInitCommand(): Promise<void> {
     }
   });
   const model = await promptText({
-    message: "Default refinement model",
+    message: "Default model for draft revision",
     initialValue: initialConfig.refine.defaults.model,
     validate(value) {
       return value.trim().length > 0
