@@ -41,20 +41,20 @@
 
 ## 6. Deterministic Run Execution
 
-- [ ] 6.1 Implement `uraniborg run <file>` input validation and input collection for source draft path, iteration count, and non-interactive defaults before model selection
-- [ ] 6.2 Implement review/refine model selection and validation so unavailable review models are rejected before run creation and the user is prompted to choose another model or launch the relevant Feynman remediation flow before valid selections are prepared for persistence
-- [ ] 6.3 Implement run preflight that evaluates required versus recommended readiness, offers remediation, blocks on required failures, and only permits continuation when required checks pass
-- [ ] 6.4 Implement run bootstrap that creates the run directory, initializes `run.json`, writes `original.md` and `current.md`, creates the initial `information-highway.md`, and persists `config.snapshot.json`
-- [ ] 6.5 Implement the per-iteration review phase using the isolated workspace and failure-closed artifact discovery and normalization flow, including manifest transitions for `review_running`, `review_complete`, and `failed` when the review phase aborts
-- [ ] 6.6 Implement the refine phase to persist `refined.md`, `changes.md`, and `refine.log`, and to fail cleanly on malformed or empty model output while recording `refine_running`, `refine_complete`, and `failed` manifest states
-- [ ] 6.7 Implement append-only information-highway updates from validated `changes.md`, keeping initialization at run bootstrap and later writes limited to one structured iteration block per completed refinement while recording `memory_update`
-- [ ] 6.8 Implement the multi-iteration loop that promotes `refined.md` to `current.md`, records `iteration_complete` progress in the manifest, and writes `final.md` plus `finished` state after the last successful iteration
+- [x] 6.1 Implement `uraniborg run <file>` input validation and input collection for source draft path, iteration count, and non-interactive defaults before model selection
+- [x] 6.2 Implement review/refine model selection and validation so unavailable review models are rejected before run creation and the user is prompted to choose another model or launch the relevant Feynman remediation flow before valid selections are prepared for persistence
+- [x] 6.3 Implement run preflight that evaluates required versus recommended readiness, offers remediation, blocks on required failures, and only permits continuation when required checks pass
+- [x] 6.4 Implement run bootstrap that creates the run directory, initializes `run.json`, writes `original.md` and `current.md`, creates the initial `information-highway.md`, and persists `config.snapshot.json`
+- [x] 6.5 Implement the per-iteration review phase using the isolated workspace and failure-closed artifact discovery and normalization flow, including manifest transitions for `review_running`, `review_complete`, and `failed` when the review phase aborts
+- [x] 6.6 Implement the refine phase to persist `refined.md`, `changes.md`, and `refine.log`, and to fail cleanly on malformed or empty model output while recording `refine_running`, `refine_complete`, and `failed` manifest states
+- [x] 6.7 Implement append-only information-highway updates from validated `changes.md`, keeping initialization at run bootstrap and later writes limited to one structured iteration block per completed refinement while recording `memory_update`
+- [x] 6.8 Implement the multi-iteration loop that promotes `refined.md` to `current.md`, records `iteration_complete` progress in the manifest, and writes `final.md` plus `finished` state after the last successful iteration
 
 ## 7. Recovery, History, and Hardening
 
-- [ ] 7.1 Implement cancellation handling so interrupts during review, refine, or memory update persist `cancelled` state, preserve artifacts and logs, and never silently continue on resume
-- [ ] 7.2 Implement `uraniborg resume <run-id>` restart or rejection rules for `initialized`, `review_running`, `review_complete`, `refine_running`, `refine_complete`, `memory_update`, `iteration_complete`, `failed`, `cancelled`, and `finished`
-- [ ] 7.3 Implement resume-time repair for partial artifacts and manifest transitions, including rebuilding the pending memory append from `changes.md` and re-entering the correct next phase without skipping validation
-- [ ] 7.4 Implement `uraniborg history` listing and run summaries for prior runs in any current state, including `initialized`, in-progress phase states, `finished`, `failed`, and `cancelled`, plus the explicit no-runs-available path
+- [x] 7.1 Implement cancellation handling so interrupts during review, refine, or memory update persist `cancelled` state, preserve artifacts and logs, and never silently continue on resume
+- [x] 7.2 Implement `uraniborg resume <run-id>` restart or rejection rules for `initialized`, `review_running`, `review_complete`, `refine_running`, `refine_complete`, `memory_update`, `iteration_complete`, `failed`, `cancelled`, and `finished`
+- [x] 7.3 Implement resume-time repair for partial artifacts and manifest transitions, including rebuilding the pending memory append from `changes.md` and re-entering the correct next phase without skipping validation
+- [x] 7.4 Implement `uraniborg history` listing and run summaries for prior runs in any current state, including `initialized`, in-progress phase states, `finished`, `failed`, and `cancelled`, plus the explicit no-runs-available path
 - [ ] 7.5 Add unit tests for config loading, adapter status parsing, manifest transitions and ownership, cancellation state changes, terminal-state resume behavior, prompt assembly, refine parsing, and information-highway formatting
 - [ ] 7.6 Add integration or smoke coverage for pinned runtime/version checks, doctor/models/remediation flows, required-versus-recommended preflight, Uraniborg-owned iteration input creation, isolated review artifact discovery and normalization, failure-closed review handling, multi-iteration memory carry-forward, resume repair paths for `failed`/`cancelled`/`finished`, empty-history output, and history summaries
