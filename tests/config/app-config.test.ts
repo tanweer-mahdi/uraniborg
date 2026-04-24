@@ -162,6 +162,41 @@ describe("loadUraniborgConfig", () => {
     }
   });
 
+  it("fails with config_not_found when the config file is missing", async () => {
+    const readWriter: UraniborgConfigReadWriter = {
+      async readFile(): Promise<string> {
+        throw createNodeError("ENOENT", "Missing config.");
+      },
+      async writeFile(): Promise<void> {}
+    };
+
+    const result = await loadUraniborgConfig(
+      "/tmp/config.json",
+      { OPENAI_API_KEY: "secret-key" },
+      readWriter
+    );
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.code).toBe("config_not_found");
+    }
+  });
+
+  it("fails with config_invalid_json when the file is not valid JSON", async () => {
+    const result = await loadUraniborgConfig(
+      "/tmp/config.json",
+      { OPENAI_API_KEY: "secret-key" },
+      createMemoryReadWriter("{invalid")
+    );
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.code).toBe("config_invalid_json");
+    }
+  });
+
   it("persists config JSON with stable formatting", async () => {
     const writes: string[] = [];
     const readWriter: UraniborgConfigReadWriter = {
@@ -222,4 +257,13 @@ function createMemoryReadWriter(fileContents: string): UraniborgConfigReadWriter
     },
     async writeFile(): Promise<void> {}
   };
+}
+
+function createNodeError(
+  code: string,
+  message: string
+): NodeJS.ErrnoException {
+  const error = new Error(message) as NodeJS.ErrnoException;
+  error.code = code;
+  return error;
 }

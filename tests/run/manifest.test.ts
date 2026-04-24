@@ -142,6 +142,30 @@ describe("run manifest", () => {
       memoryFilesystem.files.get("/tmp/runs/run-1/config.snapshot.json")
     ).toContain("\"iterationCount\": 2");
   });
+
+  it("rejects invalid manifest JSON and schema", async () => {
+    const invalidJsonFilesystem = createMemoryRunFilesystem({
+      "/tmp/runs/run-1/run.json": "{invalid"
+    });
+
+    await expect(
+      readRunManifest("/tmp/runs/run-1/run.json", invalidJsonFilesystem)
+    ).rejects.toMatchObject({
+      code: "manifest_invalid_json"
+    });
+
+    const invalidSchemaFilesystem = createMemoryRunFilesystem({
+      "/tmp/runs/run-1/run.json": JSON.stringify({
+        runId: "run-1"
+      })
+    });
+
+    await expect(
+      readRunManifest("/tmp/runs/run-1/run.json", invalidSchemaFilesystem)
+    ).rejects.toMatchObject({
+      code: "manifest_invalid_schema"
+    });
+  });
 });
 
 describe("run state machine", () => {
@@ -205,10 +229,93 @@ describe("run state machine", () => {
       expect(failureResult.error.code).toBe("state_ownership_violation");
     }
   });
+
+  it("records resumable source state and last error on failed and cancelled transitions", async () => {
+    const memoryFilesystem = createMemoryRunFilesystem();
+    const manifestPath = "/tmp/runs/run-1/run.json";
+
+    await writeRunManifest(
+      manifestPath,
+      createRunManifest({
+        runId: "run-1",
+        slug: "run-1",
+        title: "Run 1",
+        sourceInputPath: "/tmp/input.md",
+        iterationsPlanned: 2,
+        selectedModels: {
+          review: "review-model",
+          refine: "refine-model"
+        },
+        artifactPaths: {
+          runDirectory: "/tmp/runs/run-1",
+          manifestFile: manifestPath,
+          configSnapshotFile: "/tmp/runs/run-1/config.snapshot.json",
+          originalDraftFile: "/tmp/runs/run-1/original.md",
+          currentDraftFile: "/tmp/runs/run-1/current.md",
+          finalDraftFile: "/tmp/runs/run-1/final.md",
+          informationHighwayFile: "/tmp/runs/run-1/information-highway.md"
+        },
+        createdAt: "2026-04-21T18:15:00.000Z"
+      }),
+      memoryFilesystem
+    );
+
+    const failedResult = await transitionRunManifest(
+      manifestPath,
+      ["initialized"],
+      {
+        nextStatus: "failed",
+        nextPhase: "failed",
+        currentIteration: 1,
+        updatedAt: "2026-04-21T18:20:00.000Z",
+        lastError: {
+          code: "review_failed",
+          message: "Review failed.",
+          timestamp: "2026-04-21T18:20:00.000Z"
+        }
+      },
+      memoryFilesystem
+    );
+
+    expect(failedResult.ok).toBe(true);
+
+    if (!failedResult.ok) {
+      throw new Error("Expected failed transition to succeed.");
+    }
+
+    expect(failedResult.value.phaseMetadata.resumeFromStatus).toBe("initialized");
+    expect(failedResult.value.lastError).toEqual({
+      code: "review_failed",
+      message: "Review failed.",
+      timestamp: "2026-04-21T18:20:00.000Z"
+    });
+
+    const reopenedResult = await transitionRunManifest(
+      manifestPath,
+      ["failed"],
+      {
+        nextStatus: "review_running",
+        nextPhase: "review",
+        updatedAt: "2026-04-21T18:25:00.000Z"
+      },
+      memoryFilesystem
+    );
+
+    expect(reopenedResult.ok).toBe(true);
+
+    if (!reopenedResult.ok) {
+      throw new Error("Expected reopen transition to succeed.");
+    }
+
+    expect(reopenedResult.value.phaseMetadata.resumeFromStatus).toBeUndefined();
+    expect(reopenedResult.value.lastError).toBeUndefined();
+  });
 });
 
-function createMemoryRunFilesystem(): RunFilesystem & { files: Map<string, string> } {
-  const files = new Map<string, string>();
+function createMemoryRunFilesystem(
+  initialFiles: Record<string, string> = {}
+): RunFilesystem & { files: Map<string, string> } {
+  const files = new Map<string, string>(Object.entries(initialFiles));
 
   return {
     files,

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyFeynmanReadiness } from "../../src/review/feynman-readiness.js";
+import {
+  classifyFeynmanReadiness,
+  createRecommendedCapabilityCheck,
+  parseReviewModelCatalog
+} from "../../src/review/feynman-readiness.js";
 import type {
   FeynmanCommandExecution,
   PinnedFeynmanRuntimeStatus
@@ -110,6 +114,67 @@ describe("classifyFeynmanReadiness", () => {
         })
       })
     ]);
+  });
+
+  it("parses review models from nested machine-readable catalog output", () => {
+    const catalog = parseReviewModelCatalog(
+      createExecution({
+        args: ["model", "list"],
+        stdout: JSON.stringify({
+          data: [
+            {
+              id: "openai/gpt-5.4"
+            },
+            {
+              availableModels: [
+                {
+                  slug: "anthropic/claude-3.7"
+                }
+              ]
+            }
+          ]
+        })
+      })
+    );
+
+    expect(catalog.ready).toBe(true);
+    expect(catalog.models).toEqual([
+      "openai/gpt-5.4",
+      "anthropic/claude-3.7"
+    ]);
+  });
+
+  it("interprets JSON capability status output for recommended checks", () => {
+    const readyCheck = createRecommendedCapabilityCheck(
+      "alphaxiv",
+      createExecution({
+        args: ["alpha", "status"],
+        stdout: JSON.stringify({
+          session: {
+            authenticated: true
+          }
+        })
+      })
+    );
+    const notReadyCheck = createRecommendedCapabilityCheck(
+      "web_search",
+      createExecution({
+        args: ["search", "status"],
+        stdout: JSON.stringify({
+          providers: {
+            configured: false
+          }
+        })
+      })
+    );
+
+    expect(readyCheck.ready).toBe(true);
+    expect(notReadyCheck.ready).toBe(false);
+    expect(notReadyCheck.remediation).toEqual(
+      expect.objectContaining({
+        kind: "setup"
+      })
+    );
   });
 });
 

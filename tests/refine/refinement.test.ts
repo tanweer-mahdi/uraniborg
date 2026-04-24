@@ -62,6 +62,20 @@ describe("refinement output parser", () => {
     }
     expect(result.error.code).toBe("refine_output_invalid");
   });
+
+  it("fails when either required section is empty", () => {
+    const result = parseRefinementOutput(`=== REFINED_DRAFT ===
+# Revised draft
+
+=== CHANGE_SUMMARY ===
+`);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected refinement output parsing to fail.");
+    }
+    expect(result.error.code).toBe("refine_output_invalid");
+  });
 });
 
 describe("refinement API response parsing", () => {
@@ -117,6 +131,31 @@ describe("refinement API response parsing", () => {
     }
 
     expect(result.value.content).toContain("=== CHANGE_SUMMARY ===");
+  });
+
+  it("fails when the API response is invalid JSON or has no usable content", () => {
+    const invalidJsonResult = parseRefineApiResponse("{invalid");
+    const emptyContentResult = parseRefineApiResponse(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: []
+            }
+          }
+        ]
+      })
+    );
+
+    expect(invalidJsonResult.ok).toBe(false);
+    if (!invalidJsonResult.ok) {
+      expect(invalidJsonResult.error.code).toBe("refine_response_invalid_json");
+    }
+
+    expect(emptyContentResult.ok).toBe(false);
+    if (!emptyContentResult.ok) {
+      expect(emptyContentResult.error.code).toBe("refine_response_missing_content");
+    }
   });
 });
 
@@ -207,6 +246,32 @@ describe("refinement execution", () => {
     }
     expect(result.error.code).toBe("refine_http_error");
     expect(result.error.status).toBe(503);
+  });
+
+  it("treats an already-aborted signal as a cancelled refinement request", async () => {
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const result = await executeRefinement(
+      {
+        config: createResolvedConfig(),
+        model: "gpt-5.4",
+        currentDraft: "# Draft\n",
+        peerReview: "Needs more evidence.\n",
+        informationHighway: "## Iteration 1\n",
+        signal: abortController.signal
+      },
+      {
+        async fetch() {
+          throw new Error("Fetch should not be called for an aborted signal.");
+        }
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("refine_cancelled");
+    }
   });
 });
 

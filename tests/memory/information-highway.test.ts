@@ -2,10 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   appendInformationHighwayIteration,
+  createInitialInformationHighway,
+  formatInformationHighwayIterationBlock,
   parseChangeSummarySections
 } from "../../src/memory/information-highway.js";
 
 describe("information highway", () => {
+  it("initializes as an empty append-only memory file", () => {
+    expect(createInitialInformationHighway()).toBe("");
+  });
+
   it("parses the required change-summary sections", () => {
     const result = parseChangeSummarySections(`## Accepted reviewer points
 - Tighten the introduction
@@ -32,6 +38,24 @@ Reason: Unsupported by the draft
       expect(result.value.regressionGuards).toContain(
         "Do not reintroduce unsupported claims"
       );
+    }
+  });
+
+  it("reports which required sections are missing", () => {
+    const result = parseChangeSummarySections(`## Accepted reviewer points
+- Tighten the introduction
+
+## Changes made
+- Rewrote the opening section`);
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.details).toEqual([
+        "Rejected reviewer points",
+        "Open issues",
+        "Regression guards"
+      ]);
     }
   });
 
@@ -70,5 +94,35 @@ Reason: No evidence
     });
 
     expect(invalidResult.ok).toBe(false);
+  });
+
+  it("formats iteration blocks in the canonical section order", () => {
+    const block = formatInformationHighwayIterationBlock({
+      iterationNumber: 3,
+      sections: {
+        acceptedReviewerPoints: "- Tightened claims",
+        rejectedReviewerPoints: "- Add invented benchmark\nReason: Unsupported",
+        changesMade: "- Reframed the abstract",
+        openIssues: "- Evaluation remains thin",
+        regressionGuards: "- Do not add unsupported numbers"
+      }
+    });
+
+    expect(block).toBe(`## Iteration 3
+### Accepted reviewer points
+- Tightened claims
+
+### Rejected reviewer points
+- Add invented benchmark
+Reason: Unsupported
+
+### Changes made
+- Reframed the abstract
+
+### Open issues
+- Evaluation remains thin
+
+### Regression guards
+- Do not add unsupported numbers`);
   });
 });
