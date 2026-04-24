@@ -10,6 +10,15 @@ Canonical specs:
 - `openspec/specs/iterative-draft-run/spec.md`
 - `openspec/specs/run-recovery-and-history/spec.md`
 
+## Current UAT Status
+
+- Current UAT status: blocked for first-run bootstrap success testing
+- Reason: the locked spec requires Uraniborg to provision a pinned Feynman runtime under `~/.uraniborg/vendor/feynman`, but the current implementation does not create `runtime.json` or the pinned executable from zero state
+- Practical effect: `doctor` can detect the missing runtime, but its remediation path tries to launch a binary that does not exist and fails with `ENOENT`
+- Tester guidance: this is a product blocker, not a setup mistake
+- Do not manually create `runtime.json` or copy binaries into place as part of normal UAT unless you are explicitly running an unsupported workaround experiment
+- Primary blocker reference: `UAT-001` in [uraniborg-v1-uat-bug-inventory.md](./uraniborg-v1-uat-bug-inventory.md)
+
 ## Purpose
 
 This UAT plan validates Uraniborg v1 as a usable local-first CLI product rather than only as a passing automated test suite.
@@ -19,6 +28,31 @@ It focuses on three areas:
 1. User journey hygiene
 2. Edge case exploration
 3. Failure mode inventory
+
+## Current Execution Status
+
+UAT is currently split into unblocked checks and blocked checks.
+
+Unblocked now:
+
+- build validation
+- help output
+- `init` UX review
+- `doctor` failure clarity
+- empty-history behavior
+- packaging sanity
+- documentation quality
+- other non-run flows
+
+Blocked now:
+
+- any UAT case that requires a healthy review-side runtime
+- first successful run
+- model discovery through the pinned runtime
+- run preflight success from zero state
+- interruption during a real run
+- resume of a real run
+- history based on real run artifacts
 
 ## If You Are New To This
 
@@ -88,7 +122,7 @@ Examples:
 - Current repo state is built from the archived v1 spec set.
 - `npm run typecheck` passes.
 - `npm test` passes.
-- A real pinned Feynman runtime is available in at least one execution environment for live run/resume UAT.
+- Original live-run criterion: a healthy pinned runtime available in at least one execution environment for live run/resume UAT.
 - A valid Uraniborg refine configuration can be supplied for at least one provider.
 
 Important clarification:
@@ -96,6 +130,16 @@ Important clarification:
 - You do not need the pinned runtime to already exist in every environment before UAT starts.
 - For bootstrap testing, one of the things you are validating is whether Uraniborg can prepare or repair that runtime state.
 - For successful run/resume testing, you do need at least one environment where the pinned runtime is present and healthy.
+- Current reality: this criterion is not satisfiable through the normal first-run product flow.
+- Therefore, live run/resume UAT cannot proceed until either:
+  - the product provisions the pinned runtime correctly, or
+  - an explicitly approved temporary test strategy is defined
+
+Current live-UAT note:
+
+- the current implementation has now been shown to create the app-home directories but not to provision the pinned runtime from zero state
+- it also does not currently reuse an already-installed healthy Feynman binary when the pinned runtime is absent
+- treat this as an active product defect during UAT, not as an operator mistake
 
 ## Exit Criteria
 
@@ -106,6 +150,13 @@ Important clarification:
   - expected limitation
   - environment/setup issue
 - Failure-mode inventory is updated with observed behavior deltas from real runs.
+
+## UAT Stop Conditions
+
+- Stop immediately if `doctor` reports a missing pinned runtime manifest or executable and remediation fails with `ENOENT`.
+- Do not continue trying `run` or `resume` cases after this point.
+- Record the terminal output and mark the session as blocked at first-run bootstrap.
+- Continue only with non-runtime-dependent checks.
 
 ## Test Environments
 
@@ -203,15 +254,15 @@ The priority here is not just functional success. The flow must be legible, non-
 
 | ID | Priority | Journey | Action | Expected result |
 |---|---|---|---|---|
-| `UJ-01` | P0 | First-time bootstrap | Run `uraniborg doctor` in `ENV-A` | Creates `~/.uraniborg/` layout, checks pinned runtime, reports refine readiness clearly |
+| `UJ-01` | P0 | First-time bootstrap | Run `uraniborg doctor` in `ENV-A` | Should create `~/.uraniborg/` layout, provision pinned runtime, and report refine readiness clearly; currently expected to fail in implementation |
 | `UJ-02` | P0 | Initial refine setup | Run `uraniborg init` with no existing config | Prompts only for Uraniborg-owned refine settings and writes a valid config |
-| `UJ-03` | P0 | First successful run | Run `uraniborg run fixture-draft-medium.md` | Prompts for missing choices, starts run, creates full artifact tree, finishes with `final.md` |
-| `UJ-04` | P0 | Run preflight clarity | Start run with missing recommended capabilities only | Warns that review freshness/coverage may be weaker and still allows continuation |
+| `UJ-03` | P0 | First successful run | Run `uraniborg run fixture-draft-medium.md` | Blocked by `UAT-001` until a healthy pinned runtime can be reached |
+| `UJ-04` | P0 | Run preflight clarity | Start run with missing recommended capabilities only | Only partially testable because successful readiness cannot currently be reached from zero state |
 | `UJ-05` | P0 | Required review failure clarity | Start run with pinned runtime mismatch or unavailable review model | Blocks before run execution and offers the relevant remediation path |
-| `UJ-06` | P1 | Model visibility | Run `uraniborg models` | Shows review model availability, refine model default, and remediation guidance when needed |
+| `UJ-06` | P1 | Model visibility | Run `uraniborg models` | Only failure-path messaging is testable right now; real model discovery is blocked |
 | `UJ-07` | P0 | Artifact inspection | After a successful 2-iteration run, inspect run directory | `original.md`, `current.md`, `final.md`, `information-highway.md`, per-iteration files, and `run.json` all exist and are coherent |
-| `UJ-08` | P0 | Cancellation and resume | Interrupt a run during review, refine, and memory in separate executions | Each interruption records `cancelled`, preserves logs/artifacts, and resumes from the correct phase |
-| `UJ-09` | P0 | History discoverability | Run `uraniborg history` with multiple prior runs | Lists run id, timestamp, and state accurately for `initialized`, in-progress, `finished`, `failed`, and `cancelled` runs |
+| `UJ-08` | P0 | Cancellation and resume | Interrupt a run during review, refine, and memory in separate executions | Blocked until a real run can start |
+| `UJ-09` | P0 | History discoverability | Run `uraniborg history` with multiple prior runs | Only empty-history path is currently testable without workaround seeding |
 | `UJ-10` | P1 | Repeat-run hygiene | Run a second successful draft through the same app home | Reuses app home cleanly without mutating or deleting prior runs |
 
 Recommended beginner order:
@@ -250,6 +301,27 @@ If you are new to UAT, do not start here.
 
 First get one clean successful run working.
 Then come back to the edge cases one group at a time.
+
+## What Can Still Be Validated Now
+
+- build, typecheck, and test pass/fail behavior
+- CLI help and command discoverability
+- `doctor` messaging for missing runtime and missing refine secret
+- `init` copy, terminology, and setup expectations
+- whether `init` falsely implies setup is complete
+- `history` behavior when no runs exist
+- packaging/bin-path correctness
+- documentation quality and beginner usability
+
+## What Is Blocked Now
+
+- successful bootstrap of the review runtime
+- review model discovery through the pinned runtime
+- first complete run
+- artifact tree creation from a real run
+- interruption during review/refine
+- resume of cancelled or failed real runs
+- history summaries for real runs
 
 ### Input And Setup Edge Cases
 
@@ -388,6 +460,14 @@ If this is your very first run through the product, use this simpler order inste
 - Real pinned-runtime validation still needs live confirmation because current automated coverage uses test doubles rather than a real embedded Feynman install.
 - Real provider-login and remediation launches need human verification for UX quality, not just command correctness.
 - Large-draft behavior and long-running interruption timing should be exercised manually, because automated tests currently cover behavior shape rather than latency/stress characteristics.
+
+## Product Feedback Outside The Locked Spec
+
+- The locked spec required pinned-runtime provisioning and pinned-runtime use.
+- Separate product feedback from UAT: Uraniborg should also consider reusing an existing healthy local Feynman installation when present.
+- Example local installation raised during UAT:
+  - `/Users/shahmahdihasan/.local/bin/feynman`
+- This is not the current spec baseline, but it is strong user-journey feedback and should be tracked as a follow-up product decision.
 
 ## Best Next Step
 
