@@ -4,7 +4,11 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { runRunCommand } from "../../src/cli/commands/run.js";
+import {
+  prepareRunEnvironment,
+  runRunCommand,
+  type RunPrompts
+} from "../../src/cli/commands/run.js";
 import { readRunManifest } from "../../src/run/manifest.js";
 import { createOperationCancelledError } from "../../src/types/cancellation.js";
 import type {
@@ -412,6 +416,399 @@ Reason: Unsupported by available material
       readFile(path.join(runDirectory, "iter-1", "review.log"), "utf8")
     ).resolves.toContain("Pinned Feynman command cancelled.");
   });
+
+  it("carries information-highway memory and iteration input forward across multiple iterations", async () => {
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), "uraniborg-run-"));
+    temporaryRoots.push(temporaryRoot);
+
+    const sourceFile = path.join(temporaryRoot, "idea.md");
+    await writeFile(sourceFile, "# Draft\n\nInitial argument.\n", "utf8");
+
+    const homeDirectory = path.join(temporaryRoot, "home");
+    const requestBodies: string[] = [];
+    let reviewInvocationCount = 0;
+
+    await runRunCommand(
+      sourceFile,
+      {
+        iterations: "2",
+        reviewModel: "openai/gpt-5.4",
+        refineModel: "gpt-5.4",
+        nonInteractive: true
+      },
+      {
+        cwd: temporaryRoot,
+        environment: {
+          OPENAI_API_KEY: "secret"
+        },
+        resolvePaths() {
+          return createPaths(homeDirectory);
+        },
+        async loadConfig() {
+          return ok(createResolvedConfig());
+        },
+        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+          return createReadyRuntimeStatus(homeDirectory);
+        },
+        async listModels() {
+          return createExecution({
+            args: ["model", "list"],
+            stdout: JSON.stringify(["openai/gpt-5.4"])
+          });
+        },
+        async getAlphaStatus() {
+          return createExecution({
+            args: ["alpha", "status"],
+            stdout: "AlphaXiv ready"
+          });
+        },
+        async getSearchStatus() {
+          return createExecution({
+            args: ["search", "status"],
+            stdout: "Web search ready"
+          });
+        },
+        async ensureAppHome(paths) {
+          await mkdir(paths.appHomeDirectory, { recursive: true });
+          await mkdir(paths.vendorDirectory, { recursive: true });
+          await mkdir(paths.feynmanRuntimeDirectory, { recursive: true });
+          await mkdir(paths.runsDirectory, { recursive: true });
+
+          return {
+            paths,
+            appHome: {
+              kind: "directory",
+              path: paths.appHomeDirectory
+            },
+            vendor: {
+              kind: "directory",
+              path: paths.vendorDirectory
+            },
+            feynmanRuntime: {
+              kind: "directory",
+              path: paths.feynmanRuntimeDirectory
+            },
+            runs: {
+              kind: "directory",
+              path: paths.runsDirectory
+            },
+            isLayoutValid: true
+          };
+        },
+        httpClient: {
+          async fetch(_requestUrl, init) {
+            requestBodies.push(init.body);
+            const iterationNumber = requestBodies.length;
+
+            return {
+              ok: true,
+              status: 200,
+              async text() {
+                return JSON.stringify({
+                  id: `resp-${iterationNumber}`,
+                  model: "gpt-5.4",
+                  choices: [
+                    {
+                      message: {
+                        content: `=== REFINED_DRAFT ===
+# Draft
+
+Iteration ${iterationNumber} revision.
+
+=== CHANGE_SUMMARY ===
+## Accepted reviewer points
+- Address review point ${iterationNumber}
+
+## Rejected reviewer points
+- Reject unsupported ask ${iterationNumber}
+Reason: Unsupported by available material
+
+## Changes made
+- Applied iteration ${iterationNumber} revision
+
+## Open issues
+- Open issue ${iterationNumber}
+
+## Regression guards
+- Guard ${iterationNumber}`
+                      }
+                    }
+                  ]
+                });
+              }
+            };
+          }
+        },
+        runner: {
+          async run(
+            executablePath: string,
+            args: readonly string[]
+          ): Promise<FeynmanCommandExecution> {
+            reviewInvocationCount += 1;
+            const cwdIndex = args.indexOf("--cwd");
+            const workspaceDirectory =
+              cwdIndex >= 0 ? args[cwdIndex + 1] : undefined;
+
+            if (typeof workspaceDirectory !== "string") {
+              throw new Error("Expected --cwd in review invocation.");
+            }
+
+            const outputsDirectory = path.join(workspaceDirectory, "outputs");
+            await mkdir(outputsDirectory, { recursive: true });
+            await writeFile(
+              path.join(outputsDirectory, `idea-${reviewInvocationCount}-review.md`),
+              `peer review ${reviewInvocationCount}\n`,
+              "utf8"
+            );
+
+            return {
+              executablePath,
+              args,
+              exitCode: 0,
+              stdout: "review complete\n",
+              stderr: ""
+            };
+          }
+        },
+        clock: {
+          now() {
+            return new Date("2026-04-24T00:00:00.000Z");
+          }
+        },
+        writeLine() {
+          return undefined;
+        }
+      }
+    );
+
+    const runDirectory = path.join(
+      homeDirectory,
+      ".uraniborg",
+      "runs",
+      "2026-04-24T00-00-00Z-idea"
+    );
+
+    expect(requestBodies).toHaveLength(2);
+    expect(requestBodies[0]).toContain("INFORMATION_HIGHWAY\\n");
+    expect(requestBodies[1]).toContain("## Iteration 1");
+    expect(requestBodies[1]).toContain("Guard 1");
+    await expect(
+      readFile(path.join(runDirectory, "iter-2", "input.md"), "utf8")
+    ).resolves.toContain("Iteration 1 revision.");
+    await expect(
+      readFile(path.join(runDirectory, "information-highway.md"), "utf8")
+    ).resolves.toContain("## Iteration 2");
+    await expect(readFile(path.join(runDirectory, "final.md"), "utf8")).resolves.toContain(
+      "Iteration 2 revision."
+    );
+  });
+});
+
+describe("prepareRunEnvironment", () => {
+  it("launches pinned-runtime remediation for required version mismatches and rechecks readiness", async () => {
+    const lines: string[] = [];
+    const launchedCommands: Array<{
+      executablePath: string;
+      args: readonly string[];
+    }> = [];
+    const prompts = createInteractivePrompts([true]);
+    let runtimeInspectionCount = 0;
+
+    const prepared = await prepareRunEnvironment(
+      {
+        reviewModel: "openai/gpt-5.4",
+        refineModel: "gpt-5.4"
+      },
+      {
+        environment: {
+          OPENAI_API_KEY: "secret"
+        },
+        interactive: true,
+        prompts,
+        resolvePaths() {
+          return createPaths("/tmp/alice");
+        },
+        async ensureAppHome(paths) {
+          return {
+            paths,
+            appHome: {
+              kind: "directory",
+              path: paths.appHomeDirectory
+            },
+            vendor: {
+              kind: "directory",
+              path: paths.vendorDirectory
+            },
+            feynmanRuntime: {
+              kind: "directory",
+              path: paths.feynmanRuntimeDirectory
+            },
+            runs: {
+              kind: "directory",
+              path: paths.runsDirectory
+            },
+            isLayoutValid: true
+          };
+        },
+        async loadConfig() {
+          return ok(createResolvedConfig());
+        },
+        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+          runtimeInspectionCount += 1;
+
+          return runtimeInspectionCount === 1
+            ? {
+                ready: false,
+                code: "version_mismatch",
+                manifestPath: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
+                executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+                expectedVersion: "1.2.3",
+                detectedVersion: "9.9.9",
+                warnings: []
+              }
+            : createReadyRuntimeStatus("/tmp/alice");
+        },
+        async listModels() {
+          return createExecution({
+            args: ["model", "list"],
+            stdout: JSON.stringify(["openai/gpt-5.4"])
+          });
+        },
+        async getAlphaStatus() {
+          return createExecution({
+            args: ["alpha", "status"],
+            stdout: "AlphaXiv ready"
+          });
+        },
+        async getSearchStatus() {
+          return createExecution({
+            args: ["search", "status"],
+            stdout: "Web search ready"
+          });
+        },
+        runner: createReviewRunner(),
+        launcher: {
+          async launch(executablePath, args) {
+            launchedCommands.push({
+              executablePath,
+              args
+            });
+
+            return {
+              exitCode: 0
+            };
+          }
+        },
+        writeLine(message) {
+          lines.push(message);
+        }
+      }
+    );
+
+    expect(prepared.runtimeStatus.ready).toBe(true);
+    expect(runtimeInspectionCount).toBe(2);
+    expect(launchedCommands).toEqual([
+      {
+        executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+        args: ["setup"]
+      }
+    ]);
+    expect(lines).toContain(
+      "Launching feynman setup via pinned runtime..."
+    );
+  });
+
+  it("warns on recommended readiness gaps without blocking non-interactive preflight", async () => {
+    const lines: string[] = [];
+
+    const prepared = await prepareRunEnvironment(
+      {
+        reviewModel: "openai/gpt-5.4",
+        refineModel: "gpt-5.4",
+        nonInteractive: true
+      },
+      {
+        environment: {
+          OPENAI_API_KEY: "secret"
+        },
+        interactive: false,
+        prompts: createInteractivePrompts([]),
+        resolvePaths() {
+          return createPaths("/tmp/alice");
+        },
+        async ensureAppHome(paths) {
+          return {
+            paths,
+            appHome: {
+              kind: "directory",
+              path: paths.appHomeDirectory
+            },
+            vendor: {
+              kind: "directory",
+              path: paths.vendorDirectory
+            },
+            feynmanRuntime: {
+              kind: "directory",
+              path: paths.feynmanRuntimeDirectory
+            },
+            runs: {
+              kind: "directory",
+              path: paths.runsDirectory
+            },
+            isLayoutValid: true
+          };
+        },
+        async loadConfig() {
+          return ok(createResolvedConfig());
+        },
+        async inspectRuntime(): Promise<PinnedFeynmanRuntimeStatus> {
+          return createReadyRuntimeStatus("/tmp/alice");
+        },
+        async listModels() {
+          return createExecution({
+            args: ["model", "list"],
+            stdout: JSON.stringify(["openai/gpt-5.4"])
+          });
+        },
+        async getAlphaStatus() {
+          return createExecution({
+            args: ["alpha", "status"],
+            stdout: "AlphaXiv not configured"
+          });
+        },
+        async getSearchStatus() {
+          return createExecution({
+            args: ["search", "status"],
+            stdout: "Web search not configured"
+          });
+        },
+        runner: createReviewRunner(),
+        launcher: {
+          async launch() {
+            return {
+              exitCode: 0
+            };
+          }
+        },
+        writeLine(message) {
+          lines.push(message);
+        }
+      }
+    );
+
+    expect(prepared.selectedModels).toEqual({
+      review: "openai/gpt-5.4",
+      refine: "gpt-5.4"
+    });
+    expect(prepared.readinessReport.requiredReady).toBe(true);
+    expect(prepared.readinessReport.recommendedReady).toBe(false);
+    expect(lines).toContain(
+      "[warn] AlphaXiv is not configured. Latest-paper and paper-metadata access may be weaker."
+    );
+    expect(lines).toContain(
+      "[warn] Web search is not configured. Latest web research coverage may be weaker."
+    );
+  });
 });
 
 function createExecution(options: {
@@ -426,6 +823,104 @@ function createExecution(options: {
     exitCode: options.exitCode ?? 0,
     stdout: options.stdout,
     stderr: options.stderr ?? ""
+  };
+}
+
+function createReadyRuntimeStatus(
+  homeDirectory: string
+): PinnedFeynmanRuntimeStatus {
+  return {
+    ready: true,
+    code: "ready",
+    manifestPath: path.join(
+      homeDirectory,
+      ".uraniborg",
+      "vendor",
+      "feynman",
+      "runtime.json"
+    ),
+    executablePath: path.join(
+      homeDirectory,
+      ".uraniborg",
+      "vendor",
+      "feynman",
+      "bin",
+      "feynman"
+    ),
+    expectedVersion: "1.2.3",
+    detectedVersion: "1.2.3",
+    warnings: []
+  };
+}
+
+function createPaths(homeDirectory: string) {
+  return {
+    homeDirectory,
+    appHomeDirectory: path.join(homeDirectory, ".uraniborg"),
+    configFile: path.join(homeDirectory, ".uraniborg", "config.json"),
+    vendorDirectory: path.join(homeDirectory, ".uraniborg", "vendor"),
+    feynmanRuntimeDirectory: path.join(
+      homeDirectory,
+      ".uraniborg",
+      "vendor",
+      "feynman"
+    ),
+    feynmanRuntimeManifestFile: path.join(
+      homeDirectory,
+      ".uraniborg",
+      "vendor",
+      "feynman",
+      "runtime.json"
+    ),
+    runsDirectory: path.join(homeDirectory, ".uraniborg", "runs")
+  };
+}
+
+function createResolvedConfig() {
+  return {
+    version: 1 as const,
+    refine: {
+      endpoint: {
+        baseUrl: "https://api.example.com/v1",
+        apiKeyEnvVar: "OPENAI_API_KEY",
+        apiKey: "secret",
+        timeoutMs: 60000
+      },
+      defaults: {
+        model: "gpt-5.4",
+        temperature: 0.2
+      }
+    }
+  };
+}
+
+function createInteractivePrompts(
+  confirmResponses: boolean[]
+): RunPrompts {
+  const remainingResponses = [...confirmResponses];
+
+  return {
+    async confirm() {
+      const response = remainingResponses.shift();
+
+      if (typeof response !== "boolean") {
+        throw new Error("Unexpected confirmation prompt.");
+      }
+
+      return response;
+    },
+    cancel() {
+      return undefined;
+    },
+    isCancel(_value: unknown): _value is symbol {
+      return false;
+    },
+    async select() {
+      throw new Error("Select prompt was not expected.");
+    },
+    async text() {
+      throw new Error("Text prompt was not expected.");
+    }
   };
 }
 
