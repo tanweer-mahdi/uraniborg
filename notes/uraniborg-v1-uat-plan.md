@@ -1,0 +1,260 @@
+# Uraniborg v1 UAT Plan
+
+Date: 2026-04-24
+Status: Draft for execution
+Spec baseline: archived change `openspec/changes/archive/2026-04-24-build-uraniborg-v1/`
+Canonical specs:
+
+- `openspec/specs/environment-setup/spec.md`
+- `openspec/specs/model-selection/spec.md`
+- `openspec/specs/iterative-draft-run/spec.md`
+- `openspec/specs/run-recovery-and-history/spec.md`
+
+## Purpose
+
+This UAT plan validates Uraniborg v1 as a usable local-first CLI product rather than only as a passing automated test suite.
+
+It focuses on three areas:
+
+1. User journey hygiene
+2. Edge case exploration
+3. Failure mode inventory
+
+## UAT Objectives
+
+- Confirm the first-run and repeat-run journeys are understandable, deterministic, and free of hidden setup assumptions.
+- Confirm Uraniborg preserves its ownership boundaries:
+  - pinned Feynman runtime for review-side work
+  - Uraniborg-owned refine config
+  - review does not receive memory
+  - refinement does receive memory
+- Confirm artifact hygiene:
+  - durable local outputs
+  - clear run manifests
+  - resumable interrupted runs
+  - history remains accurate
+- Confirm failure paths are explicit, non-silent, and operationally recoverable.
+
+## Entry Criteria
+
+- Current repo state is built from the archived v1 spec set.
+- `npm run typecheck` passes.
+- `npm test` passes.
+- A real pinned Feynman runtime is available in at least one execution environment.
+- A valid Uraniborg refine configuration can be supplied for at least one provider.
+
+## Exit Criteria
+
+- All P0 and P1 UAT cases pass.
+- No silent fallback, destructive mutation, or artifact-loss bug remains open.
+- All failed cases are triaged into:
+  - product defect
+  - expected limitation
+  - environment/setup issue
+- Failure-mode inventory is updated with observed behavior deltas from real runs.
+
+## Test Environments
+
+Use at least these four environments:
+
+| Env ID | Shape | Purpose |
+|---|---|---|
+| `ENV-A` | Fresh machine or fresh home directory with no `~/.uraniborg/` | Validate bootstrap and first-run hygiene |
+| `ENV-B` | Existing valid app home with completed prior runs | Validate reuse, history, and repeatability |
+| `ENV-C` | Existing app home with broken runtime or config | Validate failure clarity and remediation |
+| `ENV-D` | Interrupt-capable environment where runs can be stopped mid-phase | Validate cancellation and resume |
+
+## Test Fixtures
+
+Prepare these fixtures before execution:
+
+- `fixture-idea-minimal.md`
+  - short Markdown idea with no references
+- `fixture-draft-medium.md`
+  - 2-4 page Markdown draft with sections and claims that can be revised
+- `fixture-non-markdown.txt`
+  - invalid run input
+- `fixture-bad-config.json`
+  - malformed Uraniborg config
+- `fixture-missing-env`
+  - valid config pointing at an unset API key env var
+- `fixture-runtime-conflict`
+  - pinned runtime valid, conflicting global `feynman` on `PATH`
+
+## Evidence To Capture
+
+For every UAT case, capture:
+
+- terminal transcript or command log
+- resulting files under `~/.uraniborg/`
+- `run.json` when a run exists
+- `review.log` and `refine.log` when relevant
+- exact user-facing error or warning text
+- pass/fail decision and defect reference if failed
+
+## User Journey Hygiene
+
+The priority here is not just functional success. The flow must be legible, non-confusing, and operationally clean.
+
+### Hygiene Standards
+
+- No command should rely on undocumented manual Feynman installation.
+- Required failures must block clearly.
+- Recommended-but-missing capabilities must warn clearly without pretending they are blockers.
+- User-visible messages must explain what to do next.
+- Existing runs and prior artifacts must never be deleted as part of normal setup or recovery.
+- Resumes must be state-driven and must never silently skip unfinished work.
+
+### User Journey Matrix
+
+| ID | Priority | Journey | Action | Expected result |
+|---|---|---|---|---|
+| `UJ-01` | P0 | First-time bootstrap | Run `uraniborg doctor` in `ENV-A` | Creates `~/.uraniborg/` layout, checks pinned runtime, reports refine readiness clearly |
+| `UJ-02` | P0 | Initial refine setup | Run `uraniborg init` with no existing config | Prompts only for Uraniborg-owned refine settings and writes a valid config |
+| `UJ-03` | P0 | First successful run | Run `uraniborg run fixture-draft-medium.md` | Prompts for missing choices, starts run, creates full artifact tree, finishes with `final.md` |
+| `UJ-04` | P0 | Run preflight clarity | Start run with missing recommended capabilities only | Warns that review freshness/coverage may be weaker and still allows continuation |
+| `UJ-05` | P0 | Required review failure clarity | Start run with pinned runtime mismatch or unavailable review model | Blocks before run execution and offers the relevant remediation path |
+| `UJ-06` | P1 | Model visibility | Run `uraniborg models` | Shows review model availability, refine model default, and remediation guidance when needed |
+| `UJ-07` | P0 | Artifact inspection | After a successful 2-iteration run, inspect run directory | `original.md`, `current.md`, `final.md`, `information-highway.md`, per-iteration files, and `run.json` all exist and are coherent |
+| `UJ-08` | P0 | Cancellation and resume | Interrupt a run during review, refine, and memory in separate executions | Each interruption records `cancelled`, preserves logs/artifacts, and resumes from the correct phase |
+| `UJ-09` | P0 | History discoverability | Run `uraniborg history` with multiple prior runs | Lists run id, timestamp, and state accurately for `initialized`, in-progress, `finished`, `failed`, and `cancelled` runs |
+| `UJ-10` | P1 | Repeat-run hygiene | Run a second successful draft through the same app home | Reuses app home cleanly without mutating or deleting prior runs |
+
+### Explicit Hygiene Checks
+
+Run these checks during every P0 journey:
+
+- Confirm the review step only receives `iter-N/input.md` and not `information-highway.md`.
+- Confirm the refine step receives current draft, latest review, and accumulated information highway.
+- Confirm the run manifest phase/status matches what the terminal just reported.
+- Confirm warnings are warnings, not disguised hard failures.
+- Confirm errors identify the failing surface:
+  - app home
+  - pinned runtime
+  - review model discovery
+  - refine config
+  - review execution
+  - refine parsing
+  - memory update
+
+## Edge Case Exploration
+
+This section is intentionally exploratory. The goal is to surface brittle assumptions before users do.
+
+### Input And Setup Edge Cases
+
+| ID | Priority | Edge case | Expected behavior |
+|---|---|---|---|
+| `EC-01` | P0 | Missing input file | Reject before run creation with a clear read failure |
+| `EC-02` | P0 | Non-Markdown input path | Reject before artifact creation |
+| `EC-03` | P1 | Iteration count below range | Reject with range-specific validation message |
+| `EC-04` | P1 | Iteration count above range | Reject with range-specific validation message |
+| `EC-05` | P0 | Missing `config.json` | `doctor` reports refine config failure; `run` directs user to `uraniborg init` |
+| `EC-06` | P0 | Invalid config JSON | Fails loudly with config parse/schema error |
+| `EC-07` | P0 | Missing refine API key env var | Fails loudly before refinement begins |
+
+### Runtime And Model Edge Cases
+
+| ID | Priority | Edge case | Expected behavior |
+|---|---|---|---|
+| `EC-08` | P0 | Pinned runtime manifest missing | Report pinned-runtime failure, no `PATH` fallback |
+| `EC-09` | P0 | Pinned executable not runnable | Report executable failure, offer setup remediation |
+| `EC-10` | P0 | Global `feynman` conflicts with pinned version | Warn but continue using pinned runtime |
+| `EC-11` | P0 | Review model discovery fails | `models` and `run` surface review-side failure without fabricating models |
+| `EC-12` | P0 | Selected review model unavailable | Reject selection and require valid choice or remediation |
+| `EC-13` | P1 | AlphaXiv missing | Warn as recommended-only, do not block |
+| `EC-14` | P1 | Web search missing | Warn as recommended-only, do not block |
+
+### Iteration And Artifact Edge Cases
+
+| ID | Priority | Edge case | Expected behavior |
+|---|---|---|---|
+| `EC-15` | P0 | Review exits non-zero | Run moves to `failed`, review log preserved |
+| `EC-16` | P0 | Review produces no usable artifact | Run fails closed, no refinement attempt |
+| `EC-17` | P0 | Multiple candidate review artifacts | Run fails closed on ambiguity |
+| `EC-18` | P0 | Empty normalized review artifact | Fail closed |
+| `EC-19` | P0 | Refine response missing `REFINED_DRAFT` or `CHANGE_SUMMARY` | Fail closed, write `refine.log`, set `failed` |
+| `EC-20` | P0 | Refine output contains empty parsed sections | Fail closed |
+| `EC-21` | P0 | `changes.md` missing required information-highway headings | Fail memory update loudly instead of guessing |
+| `EC-22` | P1 | Multi-iteration run with prior memory | Next refinement includes prior `Iteration N` blocks and does not regress accepted changes silently |
+
+### Recovery And History Edge Cases
+
+| ID | Priority | Edge case | Expected behavior |
+|---|---|---|---|
+| `EC-23` | P0 | Resume `finished` run | Reject resume explicitly |
+| `EC-24` | P0 | Resume `failed`/`cancelled` run without `resumeFromStatus` | Reject resume explicitly |
+| `EC-25` | P0 | Resume from `review_running` | Re-run review phase for that iteration |
+| `EC-26` | P0 | Resume from `refine_running` | Re-run refine phase for that iteration |
+| `EC-27` | P0 | Resume from `memory_update` with valid `changes.md` | Rebuild memory append without rerunning review or refine |
+| `EC-28` | P0 | Resume from `memory_update` with missing required artifacts | Fail loudly, preserve current state |
+| `EC-29` | P1 | Empty history | Return explicit "no runs" message |
+| `EC-30` | P1 | History with mixed states | Order and summarize runs correctly |
+
+## Failure Mode Inventory
+
+This inventory is the operator-facing failure map. Every item should be observed in either automated tests, manual UAT, or both.
+
+| Area | Trigger | Expected system behavior | Severity | Evidence required |
+|---|---|---|---|---|
+| App home bootstrap | Missing `~/.uraniborg/` | Create required directories without deleting prior runs | P0 | directory tree before/after |
+| App home validation | Corrupt or unreadable required path | Fail with specific filesystem message | P0 | terminal output |
+| Pinned runtime manifest | Missing or invalid manifest | Report pinned-runtime failure, no silent fallback | P0 | `doctor`/`run` output |
+| Pinned runtime version | `--version` unreadable or mismatched | Block required readiness and offer remediation | P0 | version output, terminal output |
+| Review model discovery | `feynman model list` fails | Surface failure and remediation guidance | P0 | `models` output |
+| Recommended capability absence | AlphaXiv or web search missing | Warn only, allow continuation when required checks pass | P1 | `doctor` or preflight output |
+| Review process failure | Review subprocess exits non-zero | Persist `failed`, preserve `review.log`, stop loop | P0 | manifest and log |
+| Review artifact ambiguity | Multiple new review artifacts | Fail closed, do not guess | P0 | workspace outputs and manifest |
+| Refinement HTTP failure | Network or API failure | Persist failure log, do not fabricate draft updates | P0 | `refine.log` |
+| Refinement parse failure | Missing or malformed required sections | Persist failure, do not continue to memory update | P0 | response body and manifest |
+| Memory update failure | Invalid `changes.md` headings | Persist failure, no guessed memory append | P0 | `changes.md`, manifest |
+| Cancellation | SIGINT/SIGTERM during review/refine/memory | Persist `cancelled`, preserve partial artifacts/logs, print resume guidance | P0 | manifest plus phase log |
+| Resume state mismatch | Terminal state not resumable | Reject explicitly with reason | P0 | terminal output |
+| History inspection | No runs or corrupt run entries | Empty case must not crash; corrupt entries should be triaged if observed | P1 | command output |
+
+## Manual UAT Execution Order
+
+Run the plan in this order:
+
+1. `UJ-01` to `UJ-05`
+   - validates setup, preflight, and first-run quality
+2. `UJ-06` to `UJ-10`
+   - validates models, artifacts, repeatability, cancellation, and history
+3. `EC-01` to `EC-14`
+   - validates input, config, runtime, and readiness edges
+4. `EC-15` to `EC-22`
+   - validates execution and artifact integrity edges
+5. `EC-23` to `EC-30`
+   - validates recovery and history behavior
+6. Failure-mode review
+   - map observed results back into the inventory above
+
+## Defect Triage Rules
+
+- `P0`
+  - silent fallback
+  - artifact loss
+  - wrong resume behavior
+  - review/refine boundary violation
+  - malformed success state
+- `P1`
+  - misleading warnings
+  - incomplete remediation guidance
+  - incorrect history summaries
+  - non-blocking UX confusion
+- `P2`
+  - formatting or copy issues that do not affect correctness
+
+## Recommended Sign-Off Questions
+
+- Can a new user reach a successful first run without hidden prerequisites?
+- Are required failures clearly distinguished from recommended warnings?
+- Does every interrupted or failed run leave enough evidence for diagnosis and recovery?
+- Are local artifacts trustworthy enough to debug the system without internal tooling?
+- Does the end-to-end journey feel deterministic rather than agentic or surprising?
+
+## Immediate Gaps To Watch During UAT
+
+- Real pinned-runtime validation still needs live confirmation because current automated coverage uses test doubles rather than a real embedded Feynman install.
+- Real provider-login and remediation launches need human verification for UX quality, not just command correctness.
+- Large-draft behavior and long-running interruption timing should be exercised manually, because automated tests currently cover behavior shape rather than latency/stress characteristics.
