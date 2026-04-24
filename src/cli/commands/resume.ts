@@ -16,10 +16,11 @@ import { resumeRunLifecycle } from "../../loop/index.js";
 import { readRunManifest, resolveRunArtifactPaths } from "../../run/index.js";
 import {
   createNodeFeynmanCommandRunner,
-  getPinnedFeynmanAlphaStatus,
-  getPinnedFeynmanSearchStatus,
-  inspectPinnedFeynmanRuntime,
-  listPinnedFeynmanModels
+  getFeynmanAlphaStatus,
+  getFeynmanSearchStatus,
+  inspectFeynmanRuntime,
+  listFeynmanModels,
+  type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import { writeInfo } from "../../ui/output.js";
 import {
@@ -94,10 +95,10 @@ export async function runResumeCommand(
       resolvePaths: dependencies.resolvePaths ?? resolveUraniborgPaths,
       ensureAppHome: dependencies.ensureAppHome ?? ensureUraniborgAppHome,
       loadConfig: dependencies.loadConfig ?? loadUraniborgConfig,
-      inspectRuntime: dependencies.inspectRuntime ?? inspectPinnedFeynmanRuntime,
-      listModels: dependencies.listModels ?? listPinnedFeynmanModels,
-      getAlphaStatus: dependencies.getAlphaStatus ?? getPinnedFeynmanAlphaStatus,
-      getSearchStatus: dependencies.getSearchStatus ?? getPinnedFeynmanSearchStatus,
+      inspectRuntime: dependencies.inspectRuntime ?? inspectFeynmanRuntime,
+      listModels: dependencies.listModels ?? listFeynmanModels,
+      getAlphaStatus: dependencies.getAlphaStatus ?? getFeynmanAlphaStatus,
+      getSearchStatus: dependencies.getSearchStatus ?? getFeynmanSearchStatus,
       runner,
       launcher: dependencies.launcher,
       writeLine
@@ -110,7 +111,9 @@ export async function runResumeCommand(
         runId,
         config: preparedEnvironment.config,
         runsDirectory: preparedEnvironment.paths.runsDirectory,
-        reviewExecutablePath: preparedEnvironment.runtimeStatus.executablePath
+        reviewExecutablePath: requireRuntimeExecutablePath(
+          preparedEnvironment.runtimeStatus
+        )
       },
       {
         clock: dependencies.clock,
@@ -122,4 +125,16 @@ export async function runResumeCommand(
       }
     );
   });
+}
+
+function requireRuntimeExecutablePath(
+  runtimeStatus: FeynmanRuntimeStatus
+): string {
+  const runtimeExecutablePath = runtimeStatus.executablePath;
+
+  if (runtimeStatus.ready && typeof runtimeExecutablePath === "string") {
+    return runtimeExecutablePath;
+  }
+
+  throw new Error("Ready Feynman runtime did not include an executable path.");
 }

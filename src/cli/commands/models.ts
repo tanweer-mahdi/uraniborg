@@ -6,13 +6,13 @@ import {
 } from "../../config/index.js";
 import {
   classifyFeynmanReadiness,
-  getPinnedFeynmanAlphaStatus,
-  getPinnedFeynmanSearchStatus,
-  inspectPinnedFeynmanRuntime,
-  listPinnedFeynmanModels,
+  getFeynmanAlphaStatus,
+  getFeynmanSearchStatus,
+  inspectFeynmanRuntime,
+  listFeynmanModels,
   type FeynmanCommandRunner,
   type FeynmanReadinessReport,
-  type PinnedFeynmanRuntimeStatus
+  type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import type {
   UraniborgConfig,
@@ -36,10 +36,10 @@ export function registerModelsCommand(program: Command): void {
 
 export interface ModelsCommandDependencies extends SharedRemediationDependencies {
   resolvePaths?: typeof resolveUraniborgPaths;
-  inspectRuntime?: typeof inspectPinnedFeynmanRuntime;
-  listModels?: typeof listPinnedFeynmanModels;
-  getAlphaStatus?: typeof getPinnedFeynmanAlphaStatus;
-  getSearchStatus?: typeof getPinnedFeynmanSearchStatus;
+  inspectRuntime?: typeof inspectFeynmanRuntime;
+  listModels?: typeof listFeynmanModels;
+  getAlphaStatus?: typeof getFeynmanAlphaStatus;
+  getSearchStatus?: typeof getFeynmanSearchStatus;
   loadConfig?: typeof loadParsedUraniborgConfig;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
@@ -47,7 +47,7 @@ export interface ModelsCommandDependencies extends SharedRemediationDependencies
 }
 
 interface ModelsReport {
-  runtimeStatus: PinnedFeynmanRuntimeStatus;
+  runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
 }
@@ -82,17 +82,16 @@ export async function collectModelsReport(
   dependencies: ModelsCommandDependencies = {}
 ): Promise<ModelsReport> {
   const resolvePaths = dependencies.resolvePaths ?? resolveUraniborgPaths;
-  const inspectRuntime = dependencies.inspectRuntime ?? inspectPinnedFeynmanRuntime;
-  const listModels = dependencies.listModels ?? listPinnedFeynmanModels;
+  const inspectRuntime = dependencies.inspectRuntime ?? inspectFeynmanRuntime;
+  const listModels = dependencies.listModels ?? listFeynmanModels;
   const getAlphaStatus =
-    dependencies.getAlphaStatus ?? getPinnedFeynmanAlphaStatus;
+    dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
-    dependencies.getSearchStatus ?? getPinnedFeynmanSearchStatus;
+    dependencies.getSearchStatus ?? getFeynmanSearchStatus;
   const loadConfig = dependencies.loadConfig ?? loadParsedUraniborgConfig;
 
   const paths = resolvePaths();
   const runtimeStatus = await inspectRuntime(
-    paths,
     dependencies.environment,
     dependencies.runner
   );
@@ -101,11 +100,17 @@ export async function collectModelsReport(
   });
 
   if (runtimeStatus.ready) {
+    const runtimeExecutablePath = runtimeStatus.executablePath;
+
+    if (runtimeExecutablePath === undefined) {
+      throw new Error("Ready Feynman runtime did not include an executable path.");
+    }
+
     const [modelListExecution, alphaStatusExecution, searchStatusExecution] =
       await Promise.all([
-        listModels(runtimeStatus.executablePath, dependencies.runner),
-        getAlphaStatus(runtimeStatus.executablePath, dependencies.runner),
-        getSearchStatus(runtimeStatus.executablePath, dependencies.runner)
+        listModels(runtimeExecutablePath, dependencies.runner),
+        getAlphaStatus(runtimeExecutablePath, dependencies.runner),
+        getSearchStatus(runtimeExecutablePath, dependencies.runner)
       ]);
 
     readinessReport = classifyFeynmanReadiness({

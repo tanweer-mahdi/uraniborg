@@ -7,15 +7,15 @@ import {
 } from "../../config/index.js";
 import {
   classifyFeynmanReadiness,
-  getPinnedFeynmanAlphaStatus,
-  getPinnedFeynmanSearchStatus,
-  inspectPinnedFeynmanRuntime,
-  listPinnedFeynmanModels,
-  runPinnedFeynmanDoctor,
+  getFeynmanAlphaStatus,
+  getFeynmanSearchStatus,
+  inspectFeynmanRuntime,
+  listFeynmanModels,
+  runFeynmanDoctor,
   type FeynmanCommandExecution,
   type FeynmanCommandRunner,
   type FeynmanReadinessReport,
-  type PinnedFeynmanRuntimeStatus
+  type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import type { Result } from "../../types/result.js";
 import type {
@@ -41,11 +41,11 @@ export function registerDoctorCommand(program: Command): void {
 export interface DoctorCommandDependencies extends SharedRemediationDependencies {
   resolvePaths?: typeof resolveUraniborgPaths;
   ensureAppHome?: typeof ensureUraniborgAppHome;
-  inspectRuntime?: typeof inspectPinnedFeynmanRuntime;
-  listModels?: typeof listPinnedFeynmanModels;
-  getAlphaStatus?: typeof getPinnedFeynmanAlphaStatus;
-  getSearchStatus?: typeof getPinnedFeynmanSearchStatus;
-  getDoctorOutput?: typeof runPinnedFeynmanDoctor;
+  inspectRuntime?: typeof inspectFeynmanRuntime;
+  listModels?: typeof listFeynmanModels;
+  getAlphaStatus?: typeof getFeynmanAlphaStatus;
+  getSearchStatus?: typeof getFeynmanSearchStatus;
+  getDoctorOutput?: typeof runFeynmanDoctor;
   loadConfig?: typeof loadUraniborgConfig;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
@@ -54,7 +54,7 @@ export interface DoctorCommandDependencies extends SharedRemediationDependencies
 
 interface DoctorReport {
   appHomeStatus: UraniborgAppHomeStatus;
-  runtimeStatus: PinnedFeynmanRuntimeStatus;
+  runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
   refineConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
   feynmanDoctorExecution?: FeynmanCommandExecution | undefined;
@@ -91,20 +91,19 @@ export async function collectDoctorReport(
 ): Promise<DoctorReport> {
   const resolvePaths = dependencies.resolvePaths ?? resolveUraniborgPaths;
   const ensureAppHome = dependencies.ensureAppHome ?? ensureUraniborgAppHome;
-  const inspectRuntime = dependencies.inspectRuntime ?? inspectPinnedFeynmanRuntime;
-  const listModels = dependencies.listModels ?? listPinnedFeynmanModels;
+  const inspectRuntime = dependencies.inspectRuntime ?? inspectFeynmanRuntime;
+  const listModels = dependencies.listModels ?? listFeynmanModels;
   const getAlphaStatus =
-    dependencies.getAlphaStatus ?? getPinnedFeynmanAlphaStatus;
+    dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
-    dependencies.getSearchStatus ?? getPinnedFeynmanSearchStatus;
+    dependencies.getSearchStatus ?? getFeynmanSearchStatus;
   const getDoctorOutput =
-    dependencies.getDoctorOutput ?? runPinnedFeynmanDoctor;
+    dependencies.getDoctorOutput ?? runFeynmanDoctor;
   const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
 
   const paths = resolvePaths();
   const appHomeStatus = await ensureAppHome(paths);
   const runtimeStatus = await inspectRuntime(
-    paths,
     dependencies.environment,
     dependencies.runner
   );
@@ -115,11 +114,17 @@ export async function collectDoctorReport(
   let feynmanDoctorExecution: FeynmanCommandExecution | undefined;
 
   if (runtimeStatus.ready) {
+    const runtimeExecutablePath = runtimeStatus.executablePath;
+
+    if (runtimeExecutablePath === undefined) {
+      throw new Error("Ready Feynman runtime did not include an executable path.");
+    }
+
     const [modelListExecution, alphaStatusExecution, searchStatusExecution] =
       await Promise.all([
-        listModels(runtimeStatus.executablePath, dependencies.runner),
-        getAlphaStatus(runtimeStatus.executablePath, dependencies.runner),
-        getSearchStatus(runtimeStatus.executablePath, dependencies.runner)
+        listModels(runtimeExecutablePath, dependencies.runner),
+        getAlphaStatus(runtimeExecutablePath, dependencies.runner),
+        getSearchStatus(runtimeExecutablePath, dependencies.runner)
       ]);
 
     readinessReport = classifyFeynmanReadiness({
@@ -131,7 +136,7 @@ export async function collectDoctorReport(
 
     if (readinessReport.checks.some((check) => !check.ready)) {
       feynmanDoctorExecution = await getDoctorOutput(
-        runtimeStatus.executablePath,
+        runtimeExecutablePath,
         dependencies.runner
       );
     }

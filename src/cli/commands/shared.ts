@@ -52,7 +52,7 @@ export async function executeWithProcessCancellation<T>(
 }
 
 export async function promptAndRunRemediations(options: {
-  executablePath: string;
+  executablePath?: string | undefined;
   actions: readonly FeynmanRemediationAction[];
   dependencies: SharedRemediationDependencies;
 }): Promise<void> {
@@ -70,6 +70,13 @@ export async function promptAndRunRemediations(options: {
   const writeLine = options.dependencies.writeLine ?? writeInfo;
 
   for (const action of actions) {
+    if (options.executablePath === undefined) {
+      writeLine(
+        `${action.reason} Run \`${describeFeynmanRemediationAction(action)}\` from a compatible Feynman installation once it is available on PATH.`
+      );
+      continue;
+    }
+
     const response = await prompts.confirm({
       message: `${action.reason} Launch ${describeFeynmanRemediationAction(action)} now?`,
       initialValue: true
@@ -85,7 +92,7 @@ export async function promptAndRunRemediations(options: {
     }
 
     writeLine(
-      `Launching ${describeFeynmanRemediationAction(action)} via pinned runtime...`
+      `Launching ${describeFeynmanRemediationAction(action)} via the selected Feynman runtime...`
     );
 
     const launchResult = await launchFeynmanRemediationAction(
