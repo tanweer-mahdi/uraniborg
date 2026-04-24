@@ -46,6 +46,7 @@ export interface RunManifestLastError {
 export interface RunManifestPhaseMetadata {
   currentIteration: number;
   currentPhaseStartedAt: string;
+  resumeFromStatus?: RunStatus | undefined;
 }
 
 export interface RunManifestSelectedModels {
@@ -125,7 +126,8 @@ const runManifestSchema: z.ZodType<RunManifest> = z.object({
   }),
   phaseMetadata: z.object({
     currentIteration: z.number().int().min(1),
-    currentPhaseStartedAt: z.string().datetime()
+    currentPhaseStartedAt: z.string().datetime(),
+    resumeFromStatus: z.enum(RUN_STATUSES).optional()
   }),
   lastError: z
     .object({

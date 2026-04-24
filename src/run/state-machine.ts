@@ -34,8 +34,19 @@ export async function transitionRunManifest(
     });
   }
 
+  const resumeFromStatus =
+    transition.nextStatus === "failed" || transition.nextStatus === "cancelled"
+      ? manifest.status
+      : undefined;
+  const lastError =
+    transition.lastError ??
+    (transition.nextStatus === "failed" || transition.nextStatus === "cancelled"
+      ? manifest.lastError
+      : undefined);
+
+  const { lastError: _previousLastError, ...manifestWithoutLastError } = manifest;
   const nextManifest: RunManifest = {
-    ...manifest,
+    ...manifestWithoutLastError,
     status: transition.nextStatus,
     phase: transition.nextPhase,
     updatedAt: transition.updatedAt,
@@ -44,11 +55,10 @@ export async function transitionRunManifest(
     phaseMetadata: {
       currentIteration:
         transition.currentIteration ?? manifest.phaseMetadata.currentIteration,
-      currentPhaseStartedAt: transition.updatedAt
+      currentPhaseStartedAt: transition.updatedAt,
+      ...(resumeFromStatus !== undefined ? { resumeFromStatus } : {})
     },
-    ...(transition.lastError !== undefined
-      ? { lastError: transition.lastError }
-      : {})
+    ...(lastError !== undefined ? { lastError } : {})
   };
 
   await writeRunManifest(manifestPath, nextManifest, filesystem);

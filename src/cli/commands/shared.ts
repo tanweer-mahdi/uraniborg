@@ -10,6 +10,7 @@ import {
   type FeynmanInteractiveLauncher,
   type FeynmanRemediationAction
 } from "../../review/index.js";
+import { createOperationCancelledError } from "../../types/cancellation.js";
 import { writeInfo } from "../../ui/output.js";
 
 export interface RemediationPrompts {
@@ -27,6 +28,27 @@ export interface SharedRemediationDependencies {
 
 export function createNotImplementedError(commandName: string): Error {
   return new Error(`Command "${commandName}" is not implemented yet.`);
+}
+
+export async function executeWithProcessCancellation<T>(
+  operation: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const abortController = new AbortController();
+  const abortOperation = (): void => {
+    if (!abortController.signal.aborted) {
+      abortController.abort(createOperationCancelledError("Operation cancelled."));
+    }
+  };
+
+  process.once("SIGINT", abortOperation);
+  process.once("SIGTERM", abortOperation);
+
+  try {
+    return await operation(abortController.signal);
+  } finally {
+    process.removeListener("SIGINT", abortOperation);
+    process.removeListener("SIGTERM", abortOperation);
+  }
 }
 
 export async function promptAndRunRemediations(options: {
