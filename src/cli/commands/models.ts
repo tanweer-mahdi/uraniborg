@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 
 import {
+  loadUraniborgConfig,
   loadParsedUraniborgConfig,
   resolveUraniborgPaths
 } from "../../config/index.js";
@@ -15,6 +16,7 @@ import {
   type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import type {
+  ResolvedUraniborgConfig,
   UraniborgConfig,
   UraniborgConfigLoadError
 } from "../../types/app-config.js";
@@ -40,7 +42,8 @@ export interface ModelsCommandDependencies extends SharedRemediationDependencies
   listModels?: typeof listFeynmanModels;
   getAlphaStatus?: typeof getFeynmanAlphaStatus;
   getSearchStatus?: typeof getFeynmanSearchStatus;
-  loadConfig?: typeof loadParsedUraniborgConfig;
+  loadConfig?: typeof loadUraniborgConfig;
+  loadParsedConfig?: typeof loadParsedUraniborgConfig;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
   runner?: FeynmanCommandRunner;
@@ -49,6 +52,7 @@ export interface ModelsCommandDependencies extends SharedRemediationDependencies
 interface ModelsReport {
   runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
+  resolvedConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
 }
 
@@ -88,7 +92,9 @@ export async function collectModelsReport(
     dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
     dependencies.getSearchStatus ?? getFeynmanSearchStatus;
-  const loadConfig = dependencies.loadConfig ?? loadParsedUraniborgConfig;
+  const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
+  const loadParsedConfig =
+    dependencies.loadParsedConfig ?? loadParsedUraniborgConfig;
 
   const paths = resolvePaths();
   const runtimeStatus = await inspectRuntime(
@@ -121,27 +127,36 @@ export async function collectModelsReport(
     });
   }
 
-  const parsedConfigResult = await loadConfig(paths.configFile);
+  const [resolvedConfigResult, parsedConfigResult] = await Promise.all([
+    loadConfig(paths.configFile, dependencies.environment, undefined),
+    loadParsedConfig(paths.configFile)
+  ]);
 
   return {
     runtimeStatus,
     readinessReport,
+    resolvedConfigResult,
     parsedConfigResult
   };
 }
 
 export function renderModelsReport(report: ModelsReport): readonly string[] {
-  const lines: string[] = ["Review Models"];
+  const lines: string[] = ["Review Runtime"];
 
   const reviewModelsCheck = report.readinessReport.checks.find(
     (check) => check.code === "review_models"
   );
 
   if (!report.runtimeStatus.ready) {
-    lines.push(`[fail] ${report.readinessReport.checks[0]?.summary ?? "Pinned runtime is not ready."}`);
+    lines.push(
+      `[fail] ${report.readinessReport.checks[0]?.summary ?? "Compatible Feynman runtime is not ready."}`
+    );
   } else if (reviewModelsCheck?.ready) {
     lines.push(
-      `[ok] ${report.readinessReport.reviewModels.length} review model${report.readinessReport.reviewModels.length === 1 ? "" : "s"} available through pinned Feynman.`
+      `[ok] Using ${report.runtimeStatus.executablePath}${typeof report.runtimeStatus.detectedVersion === "string" ? ` (version ${report.runtimeStatus.detectedVersion})` : ""}.`
+    );
+    lines.push(
+      `[ok] ${report.readinessReport.reviewModels.length} review model${report.readinessReport.reviewModels.length === 1 ? "" : "s"} available through the selected Feynman runtime.`
     );
 
     for (const model of report.readinessReport.reviewModels) {
@@ -149,7 +164,7 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
     }
   } else {
     lines.push(
-      `[fail] ${reviewModelsCheck?.summary ?? "Review model discovery is not ready through the pinned Feynman runtime."}`
+      `[fail] ${reviewModelsCheck?.summary ?? "Review model discovery is not ready through the selected Feynman runtime."}`
     );
 
     for (const detail of reviewModelsCheck?.details ?? []) {
@@ -159,16 +174,24 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
 
   lines.push("", "Refinement");
 
-  if (report.parsedConfigResult.ok) {
+  if (report.resolvedConfigResult.ok) {
     lines.push(
-      `[ok] Default refine model: ${report.parsedConfigResult.value.refine.defaults.model}`
+      `[ok] Refinement setup is ready.`
     );
     lines.push(
-      `Endpoint: ${report.parsedConfigResult.value.refine.endpoint.baseUrl}`
+      `Endpoint: ${report.resolvedConfigResult.value.refine.endpoint.baseUrl}`
     );
     lines.push(
-      `API key env var: ${report.parsedConfigResult.value.refine.endpoint.apiKeyEnvVar}`
+      `Default model: ${report.resolvedConfigResult.value.refine.defaults.model}`
     );
+  } else if (report.parsedConfigResult.ok) {
+    lines.push(`[fail] ${report.resolvedConfigResult.error.message}`);
+    lines.push(`Endpoint: ${report.parsedConfigResult.value.refine.endpoint.baseUrl}`);
+    lines.push(`Default model: ${report.parsedConfigResult.value.refine.defaults.model}`);
+
+    for (const detail of report.resolvedConfigResult.error.details ?? []) {
+      lines.push(`  ${detail}`);
+    }
   } else {
     lines.push(`[fail] ${report.parsedConfigResult.error.message}`);
 

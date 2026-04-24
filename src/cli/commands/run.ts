@@ -283,19 +283,6 @@ export async function prepareRunEnvironment(
 
   dependencies.writeLine("Uraniborg checks the discovered review runtime...");
 
-  const configResult = await dependencies.loadConfig(
-    paths.configFile,
-    dependencies.environment
-  );
-
-  if (!configResult.ok) {
-    throw new Error(
-      `${configResult.error.message} Run \`uraniborg init\` to configure refinement defaults.`
-    );
-  }
-
-  dependencies.writeLine("Uraniborg checks refinement config...");
-
   let runtimeStatus = await dependencies.inspectRuntime(
     dependencies.environment,
     dependencies.runner
@@ -330,6 +317,23 @@ export async function prepareRunEnvironment(
       classifyFeynmanReadiness({
         runtimeStatus
       }).checks[0]?.summary ?? "Compatible Feynman runtime is not ready."
+    );
+  }
+
+  dependencies.writeLine(
+    `Using Feynman runtime: ${requireRuntimeExecutablePath(runtimeStatus)}${typeof runtimeStatus.detectedVersion === "string" ? ` (version ${runtimeStatus.detectedVersion})` : ""}.`
+  );
+
+  dependencies.writeLine("Uraniborg checks refinement setup...");
+
+  const configResult = await dependencies.loadConfig(
+    paths.configFile,
+    dependencies.environment
+  );
+
+  if (!configResult.ok) {
+    throw new Error(
+      `${configResult.error.message} Run \`uraniborg init\` to configure refinement defaults.`
     );
   }
 

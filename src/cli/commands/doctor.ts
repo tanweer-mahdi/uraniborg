@@ -165,11 +165,9 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
       `App home layout is ready at ${report.appHomeStatus.paths.appHomeDirectory}.`,
       `App home layout is not valid at ${report.appHomeStatus.paths.appHomeDirectory}.`
     ),
-    `  vendor: ${report.appHomeStatus.vendor.kind} (${report.appHomeStatus.vendor.path})`,
-    `  runtime: ${report.appHomeStatus.feynmanRuntime.kind} (${report.appHomeStatus.feynmanRuntime.path})`,
     `  runs: ${report.appHomeStatus.runs.kind} (${report.appHomeStatus.runs.path})`,
     "",
-    "Feynman Readiness"
+    "Review Runtime"
   ];
 
   for (const check of report.readinessReport.checks) {
@@ -184,13 +182,13 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
     }
   }
 
-  lines.push("", "Refine Configuration");
+  lines.push("", "Refinement Readiness");
 
   if (report.refineConfigResult.ok) {
     lines.push(
       formatStatusLine(
         true,
-        `Refine configuration is valid. Model: ${report.refineConfigResult.value.refine.defaults.model}. Endpoint: ${report.refineConfigResult.value.refine.endpoint.baseUrl}`,
+        `Refinement setup is ready. Model: ${report.refineConfigResult.value.refine.defaults.model}. Endpoint: ${report.refineConfigResult.value.refine.endpoint.baseUrl}`,
         ""
       )
     );
@@ -225,7 +223,7 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
   if (blockingIssues) {
     lines.push("[fail] Uraniborg has blocking environment issues.");
   } else if (!report.readinessReport.recommendedReady) {
-    lines.push("[warn] Uraniborg can run, but recommended Feynman research capabilities are missing.");
+    lines.push("[warn] Uraniborg can run, but recommended research capabilities are missing.");
   } else {
     lines.push("[ok] Uraniborg environment is ready.");
   }

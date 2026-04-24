@@ -72,8 +72,6 @@ export async function inspectUraniborgAppHome(
     runs,
     isLayoutValid:
       appHome.kind === "directory" &&
-      vendor.kind === "directory" &&
-      feynmanRuntime.kind === "directory" &&
       runs.kind === "directory"
   };
 }
@@ -83,8 +81,6 @@ export async function ensureUraniborgAppHome(
   filesystem: AppHomeFilesystem = createNodeAppHomeFilesystem()
 ): Promise<UraniborgAppHomeStatus> {
   await filesystem.mkdir(paths.appHomeDirectory);
-  await filesystem.mkdir(paths.vendorDirectory);
-  await filesystem.mkdir(paths.feynmanRuntimeDirectory);
   await filesystem.mkdir(paths.runsDirectory);
 
   return inspectUraniborgAppHome(paths, filesystem);
