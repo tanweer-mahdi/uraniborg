@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 
 import { z } from "zod";
 
+import { createOperationCancelledError } from "../types/cancellation.js";
 import type { UraniborgPaths } from "../types/app-home.js";
 
 const pinnedFeynmanRuntimeManifestSchema = z.object({
@@ -27,7 +28,10 @@ export interface FeynmanCommandExecution {
 export interface FeynmanCommandRunner {
   run: (
     executablePath: string,
-    args: readonly string[]
+    args: readonly string[],
+    options?: {
+      signal?: AbortSignal | undefined;
+    }
   ) => Promise<FeynmanCommandExecution>;
 }
 
@@ -81,7 +85,10 @@ export function createNodeFeynmanCommandRunner(): FeynmanCommandRunner {
   return {
     async run(
       executablePath: string,
-      args: readonly string[]
+      args: readonly string[],
+      options?: {
+        signal?: AbortSignal | undefined;
+      }
     ): Promise<FeynmanCommandExecution> {
       return new Promise((resolve, reject) => {
         const child = spawn(executablePath, args, {
@@ -89,6 +96,37 @@ export function createNodeFeynmanCommandRunner(): FeynmanCommandRunner {
         });
         let stdout = "";
         let stderr = "";
+        let settled = false;
+
+        const finalizeReject = (error: Error): void => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          cleanupAbortListener();
+          reject(error);
+        };
+
+        const finalizeResolve = (execution: FeynmanCommandExecution): void => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          cleanupAbortListener();
+          resolve(execution);
+        };
+
+        const abortListener = (): void => {
+          child.kill("SIGTERM");
+          finalizeReject(
+            createOperationCancelledError("Pinned Feynman command cancelled.")
+          );
+        };
+        const cleanupAbortListener = (): void => {
+          options?.signal?.removeEventListener("abort", abortListener);
+        };
 
         child.stdout.setEncoding("utf8");
         child.stdout.on("data", (chunk: string) => {
@@ -100,9 +138,18 @@ export function createNodeFeynmanCommandRunner(): FeynmanCommandRunner {
           stderr += chunk;
         });
 
-        child.on("error", reject);
+        if (options?.signal?.aborted) {
+          abortListener();
+          return;
+        }
+
+        options?.signal?.addEventListener("abort", abortListener, { once: true });
+
+        child.on("error", (error) => {
+          finalizeReject(error);
+        });
         child.on("close", (exitCode) => {
-          resolve({
+          finalizeResolve({
             executablePath,
             args,
             exitCode: exitCode ?? -1,
@@ -234,9 +281,12 @@ export async function inspectPinnedFeynmanRuntime(
 export async function runPinnedFeynmanCommand(
   executablePath: string,
   args: readonly string[],
+  options?: {
+    signal?: AbortSignal | undefined;
+  },
   runner: FeynmanCommandRunner = createNodeFeynmanCommandRunner()
 ): Promise<FeynmanCommandExecution> {
-  return runner.run(executablePath, args);
+  return runner.run(executablePath, args, options);
 }
 
 export function parseFeynmanVersion(output: string): string | null {

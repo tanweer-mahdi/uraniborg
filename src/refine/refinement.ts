@@ -78,6 +78,7 @@ export interface RefineApiResponse {
 
 export type RefineErrorCode =
   | "refine_http_error"
+  | "refine_cancelled"
   | "refine_response_invalid_json"
   | "refine_response_invalid_schema"
   | "refine_response_missing_content"
@@ -111,6 +112,7 @@ export interface RefineHttpClient {
 export interface ExecuteRefinementInput extends RefinePromptInput {
   config: ResolvedUraniborgConfig;
   model: string;
+  signal?: AbortSignal | undefined;
 }
 
 export interface ExecutedRefinement {
@@ -220,7 +222,23 @@ export async function executeRefinement(
     2
   );
   const abortController = new AbortController();
+  let timedOut = false;
+  const externalAbortListener = (): void => {
+    abortController.abort();
+  };
+
+  if (input.signal?.aborted) {
+    return err(
+      createRefineError({
+        code: "refine_cancelled",
+        message: "Refinement request was cancelled."
+      })
+    );
+  }
+
+  input.signal?.addEventListener("abort", externalAbortListener, { once: true });
   const timeoutHandle = setTimeout(() => {
+    timedOut = true;
     abortController.abort();
   }, input.config.refine.endpoint.timeoutMs);
 
@@ -267,6 +285,24 @@ export async function executeRefinement(
       parsedOutput: parsedOutput.value
     });
   } catch (error) {
+    if (input.signal?.aborted) {
+      return err(
+        createRefineError({
+          code: "refine_cancelled",
+          message: "Refinement request was cancelled."
+        })
+      );
+    }
+
+    if (timedOut) {
+      return err(
+        createRefineError({
+          code: "refine_http_error",
+          message: "Refinement request timed out."
+        })
+      );
+    }
+
     return err(
       createRefineError({
         code: "refine_http_error",
@@ -276,6 +312,7 @@ export async function executeRefinement(
     );
   } finally {
     clearTimeout(timeoutHandle);
+    input.signal?.removeEventListener("abort", externalAbortListener);
   }
 }
 

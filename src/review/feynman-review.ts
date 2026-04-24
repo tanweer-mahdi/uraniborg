@@ -63,6 +63,7 @@ export interface ExecuteReviewInput {
   manifestPath: string;
   iterationNumber: number;
   failureTimestamp: string;
+  signal?: AbortSignal | undefined;
 }
 
 export function createNodeReviewFilesystem(): ReviewFilesystem {
@@ -185,6 +186,9 @@ export async function executeReviewAndNormalize(
   const execution = await runPinnedFeynmanCommand(
     command.executablePath,
     command.args,
+    {
+      signal: input.signal
+    },
     runner
   );
 
