@@ -54,7 +54,22 @@ describe("runModelsCommand", () => {
           refine: {
             endpoint: {
               baseUrl: "https://api.example.com/v1",
-              apiKeyEnvVar: "OPENAI_API_KEY",
+              apiKey: "secret",
+              timeoutMs: 60000
+            },
+            defaults: {
+              model: "gpt-5",
+              temperature: 0.2
+            }
+          }
+        });
+      },
+      async loadParsedConfig() {
+        return ok({
+          version: 1,
+          refine: {
+            endpoint: {
+              baseUrl: "https://api.example.com/v1",
               timeoutMs: 60000
             },
             defaults: {
@@ -72,8 +87,9 @@ describe("runModelsCommand", () => {
     expect(lines).toContain(
       "[fail] Review model discovery is not ready through the selected Feynman runtime."
     );
-    expect(lines).toContain("[ok] Default refine model: gpt-5");
+    expect(lines).toContain("[ok] Refinement setup is ready.");
     expect(lines).toContain("Endpoint: https://api.example.com/v1");
+    expect(lines).toContain("Default model: gpt-5");
     expect(lines).toContain(
       "[warn] Web search is not configured. Latest web research coverage may be weaker."
     );

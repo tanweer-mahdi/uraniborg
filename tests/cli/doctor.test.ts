@@ -84,7 +84,7 @@ describe("runDoctorCommand", () => {
     expect(lines).toContain("Feynman Diagnostics");
     expect(lines).toContain("  Review provider diagnostics");
     expect(lines).toContain(
-      "[warn] Uraniborg can run, but recommended Feynman research capabilities are missing."
+      "[warn] Uraniborg can run, but recommended research capabilities are missing."
     );
   });
 });

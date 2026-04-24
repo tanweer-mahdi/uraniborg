@@ -12,9 +12,9 @@
 
 ## 3. Command Surface Alignment
 
-- [ ] 3.1 Update `uraniborg doctor` output to report operational readiness for discovered Feynman runtime and runnable refinement setup
-- [ ] 3.2 Update `uraniborg models` to show discovered review-model availability and configured refine base-URL/model readiness
-- [ ] 3.3 Update run preflight to block on missing compatible Feynman or incomplete refinement setup while preserving recommended-only research warnings
+- [x] 3.1 Update `uraniborg doctor` output to report operational readiness for discovered Feynman runtime and runnable refinement setup
+- [x] 3.2 Update `uraniborg models` to show discovered review-model availability and configured refine base-URL/model readiness
+- [x] 3.3 Update run preflight to block on missing compatible Feynman or incomplete refinement setup while preserving recommended-only research warnings
 
 ## 4. Validation And Acceptance
 
