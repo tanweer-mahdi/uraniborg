@@ -1,22 +1,23 @@
 export {
   createNodeFeynmanCommandRunner,
   createNodeFeynmanRuntimeFilesystem,
-  inspectPinnedFeynmanRuntime,
-  loadPinnedFeynmanRuntimeManifest,
+  findFeynmanExecutablesOnPath,
+  inspectFeynmanRuntime,
   parseFeynmanVersion,
-  resolvePinnedFeynmanExecutablePath,
-  runPinnedFeynmanCommand,
+  runFeynmanCommand,
   type FeynmanCommandExecution,
   type FeynmanCommandRunner,
+  type FeynmanRuntimeCandidate,
+  type FeynmanRuntimeCandidateFailureCode,
   type FeynmanRuntimeFilesystem,
-  type PinnedFeynmanRuntimeManifest,
-  type PinnedFeynmanRuntimeStatus,
-  type PinnedFeynmanRuntimeStatusCode
+  type FeynmanRuntimeStatus,
+  type FeynmanRuntimeStatusCode
 } from "./feynman-bootstrap.js";
 export {
   createNodeFeynmanInteractiveLauncher,
   createAlphaLoginRemediationAction,
   createModelLoginRemediationAction,
+  createRuntimeInstallRemediationAction,
   createSetupRemediationAction,
   describeFeynmanRemediationAction,
   getFeynmanRemediationCommand,
@@ -28,9 +29,9 @@ export {
 } from "./feynman-remediation.js";
 export {
   classifyFeynmanReadiness,
-  createPinnedRuntimeReadinessCheck,
   createRecommendedCapabilityCheck,
   createReviewModelsReadinessCheck,
+  createRuntimeReadinessCheck,
   createSelectedReviewModelReadinessCheck,
   parseReviewModelCatalog,
   type ClassifyFeynmanReadinessInput,
@@ -41,17 +42,17 @@ export {
   type ReviewModelCatalog
 } from "./feynman-readiness.js";
 export {
-  getPinnedFeynmanAlphaStatus,
-  getPinnedFeynmanDoctor,
-  getPinnedFeynmanModelLoginCommand,
-  getPinnedFeynmanSearchStatus,
-  getPinnedFeynmanSetupCommand,
-  getPinnedFeynmanVersion,
-  listPinnedFeynmanModels,
-  runPinnedFeynmanAlphaLogin,
-  runPinnedFeynmanDoctor,
-  runPinnedFeynmanModelLogin,
-  runPinnedFeynmanSetup
+  getFeynmanAlphaStatus,
+  getFeynmanDoctorCommand,
+  getFeynmanModelLoginCommand,
+  getFeynmanSearchStatus,
+  getFeynmanSetupCommand,
+  getFeynmanVersion,
+  listFeynmanModels,
+  runFeynmanAlphaLogin,
+  runFeynmanDoctor,
+  runFeynmanModelLogin,
+  runFeynmanSetup
 } from "./feynman-models.js";
 export {
   REVIEW_OUTPUTS_DIRECTORY_NAME,

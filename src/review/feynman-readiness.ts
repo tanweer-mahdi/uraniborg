@@ -1,6 +1,7 @@
 import type {
   FeynmanCommandExecution,
-  PinnedFeynmanRuntimeStatus
+  FeynmanRuntimeCandidate,
+  FeynmanRuntimeStatus
 } from "./feynman-bootstrap.js";
 import {
   createAlphaLoginRemediationAction,
@@ -12,7 +13,7 @@ import {
 export type FeynmanReadinessTier = "required" | "recommended";
 
 export type FeynmanReadinessCheckCode =
-  | "pinned_runtime"
+  | "runtime"
   | "review_models"
   | "selected_review_model"
   | "alphaxiv"
@@ -42,7 +43,7 @@ export interface FeynmanReadinessReport {
 }
 
 export interface ClassifyFeynmanReadinessInput {
-  runtimeStatus: PinnedFeynmanRuntimeStatus;
+  runtimeStatus: FeynmanRuntimeStatus;
   modelListExecution?: FeynmanCommandExecution | undefined;
   selectedReviewModel?: string | undefined;
   alphaStatusExecution?: FeynmanCommandExecution | undefined;
@@ -53,7 +54,7 @@ export function classifyFeynmanReadiness(
   input: ClassifyFeynmanReadinessInput
 ): FeynmanReadinessReport {
   const checks: FeynmanReadinessCheck[] = [
-    createPinnedRuntimeReadinessCheck(input.runtimeStatus)
+    createRuntimeReadinessCheck(input.runtimeStatus)
   ];
   let reviewModels: readonly string[] = [];
 
@@ -105,44 +106,42 @@ export function classifyFeynmanReadiness(
   };
 }
 
-export function createPinnedRuntimeReadinessCheck(
-  status: PinnedFeynmanRuntimeStatus
+export function createRuntimeReadinessCheck(
+  status: FeynmanRuntimeStatus
 ): FeynmanReadinessCheck {
   if (status.ready) {
     return {
-      code: "pinned_runtime",
+      code: "runtime",
       tier: "required",
       ready: true,
-      summary: `Pinned Feynman runtime is ready at ${status.executablePath}.`,
+      summary: `Compatible Feynman runtime is ready at ${status.executablePath}.`,
       details: [
-        ...(typeof status.expectedVersion === "string"
-          ? [`Version: ${status.expectedVersion}`]
+        ...(typeof status.detectedVersion === "string"
+          ? [`Version: ${status.detectedVersion}`]
           : []),
         ...status.warnings
       ]
     };
   }
 
-  const details = [
-    `Manifest: ${status.manifestPath}`,
-    `Executable: ${status.executablePath}`,
-    ...(typeof status.expectedVersion === "string"
-      ? [`Expected version: ${status.expectedVersion}`]
-      : []),
-    ...(typeof status.detectedVersion === "string"
-      ? [`Detected version: ${status.detectedVersion}`]
-      : [])
-  ];
+  if (status.code === "runtime_missing") {
+    return {
+      code: "runtime",
+      tier: "required",
+      ready: false,
+      summary: "No compatible Feynman runtime was found on PATH.",
+      details: [
+        "Install Feynman or expose a compatible `feynman` executable on PATH before running Uraniborg."
+      ]
+    };
+  }
 
   return {
-    code: "pinned_runtime",
+    code: "runtime",
     tier: "required",
     ready: false,
-    summary: getPinnedRuntimeFailureSummary(status),
-    details,
-    remediation: createSetupRemediationAction(
-      "Repair or install the pinned Feynman runtime."
-    )
+    summary: "Discovered Feynman runtimes are incompatible with Uraniborg.",
+    details: describeIncompatibleCandidates(status.candidates)
   };
 }
 
@@ -202,7 +201,7 @@ export function createReviewModelsReadinessCheck(
     tier: "required",
     ready: false,
     summary:
-      "Review model discovery is not ready through the pinned Feynman runtime.",
+      "Review model discovery is not ready through the selected Feynman runtime.",
     details: catalog.details,
     remediation: catalog.remediation
   };
@@ -228,7 +227,7 @@ export function createSelectedReviewModelReadinessCheck(
     code: "selected_review_model",
     tier: "required",
     ready: false,
-    summary: `Selected review model "${selectedReviewModel}" is not available through the pinned Feynman runtime.`,
+    summary: `Selected review model "${selectedReviewModel}" is not available through the selected Feynman runtime.`,
     details:
       catalog.models.length > 0
         ? [`Available models: ${catalog.models.join(", ")}`]
@@ -281,23 +280,13 @@ export function createRecommendedCapabilityCheck(
   };
 }
 
-function getPinnedRuntimeFailureSummary(
-  status: PinnedFeynmanRuntimeStatus
-): string {
-  switch (status.code) {
-    case "manifest_missing":
-      return "Pinned Feynman runtime manifest is missing.";
-    case "manifest_invalid":
-      return "Pinned Feynman runtime manifest is invalid.";
-    case "executable_missing":
-      return "Pinned Feynman executable is missing or not runnable.";
-    case "version_unreadable":
-      return "Pinned Feynman version could not be read.";
-    case "version_mismatch":
-      return "Pinned Feynman version does not match the expected pinned version.";
-    case "ready":
-      return "Pinned Feynman runtime is ready.";
-  }
+function describeIncompatibleCandidates(
+  candidates: readonly FeynmanRuntimeCandidate[]
+): readonly string[] {
+  return candidates.flatMap((candidate) => [
+    `Candidate: ${candidate.executablePath}`,
+    ...candidate.details.map((detail) => `  ${detail}`)
+  ]);
 }
 
 function collectExecutionDetails(

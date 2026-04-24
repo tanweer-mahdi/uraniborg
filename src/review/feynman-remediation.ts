@@ -2,14 +2,15 @@ import { spawn } from "node:child_process";
 
 import type { FeynmanCommandRunner } from "./feynman-bootstrap.js";
 import {
-  getPinnedFeynmanModelLoginCommand,
-  getPinnedFeynmanSetupCommand,
-  runPinnedFeynmanAlphaLogin,
-  runPinnedFeynmanModelLogin,
-  runPinnedFeynmanSetup
+  getFeynmanModelLoginCommand,
+  getFeynmanSetupCommand,
+  runFeynmanAlphaLogin,
+  runFeynmanModelLogin,
+  runFeynmanSetup
 } from "./feynman-models.js";
 
 export type FeynmanRemediationKind =
+  | "install_or_expose_runtime"
   | "setup"
   | "model_login"
   | "alpha_login";
@@ -25,6 +26,15 @@ export interface FeynmanInteractiveLauncher {
     executablePath: string,
     args: readonly string[]
   ) => Promise<{ exitCode: number }>;
+}
+
+export function createRuntimeInstallRemediationAction(
+  reason: string
+): FeynmanRemediationAction {
+  return {
+    kind: "install_or_expose_runtime",
+    reason
+  };
 }
 
 export function createSetupRemediationAction(
@@ -60,10 +70,11 @@ export function getFeynmanRemediationCommand(
   action: FeynmanRemediationAction
 ): readonly string[] {
   switch (action.kind) {
+    case "install_or_expose_runtime":
     case "setup":
-      return getPinnedFeynmanSetupCommand();
+      return getFeynmanSetupCommand();
     case "model_login":
-      return getPinnedFeynmanModelLoginCommand(action.provider ?? "");
+      return getFeynmanModelLoginCommand(action.provider ?? "");
     case "alpha_login":
       return ["alpha", "login"];
   }
@@ -111,11 +122,12 @@ export async function runCapturedFeynmanRemediationAction(
   runner: FeynmanCommandRunner
 ) {
   switch (action.kind) {
+    case "install_or_expose_runtime":
     case "setup":
-      return runPinnedFeynmanSetup(executablePath, runner);
+      return runFeynmanSetup(executablePath, runner);
     case "model_login":
-      return runPinnedFeynmanModelLogin(executablePath, action.provider ?? "", runner);
+      return runFeynmanModelLogin(executablePath, action.provider ?? "", runner);
     case "alpha_login":
-      return runPinnedFeynmanAlphaLogin(executablePath, runner);
+      return runFeynmanAlphaLogin(executablePath, runner);
   }
 }

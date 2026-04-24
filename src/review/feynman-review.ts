@@ -1,7 +1,11 @@
 import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { runPinnedFeynmanCommand, type FeynmanCommandExecution, type FeynmanCommandRunner } from "./feynman-bootstrap.js";
+import {
+  runFeynmanCommand,
+  type FeynmanCommandExecution,
+  type FeynmanCommandRunner
+} from "./feynman-bootstrap.js";
 import { transitionRunManifest } from "../run/state-machine.js";
 import { writeArtifactFile, type RunFilesystem } from "../run/artifact-store.js";
 import { err, ok, type Result } from "../types/result.js";
@@ -183,7 +187,7 @@ export async function executeReviewAndNormalize(
     reviewModel: input.reviewModel,
     reviewWorkspace: input.reviewWorkspace
   });
-  const execution = await runPinnedFeynmanCommand(
+  const execution = await runFeynmanCommand(
     command.executablePath,
     command.args,
     {
