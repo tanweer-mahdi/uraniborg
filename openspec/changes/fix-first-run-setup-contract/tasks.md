@@ -6,9 +6,9 @@
 
 ## 2. Refinement Setup Redesign
 
-- [ ] 2.1 Redesign `uraniborg init` so the normal first-run path asks only for an OpenAI-compatible base URL, an API key, and a model name
-- [ ] 2.2 Remove env-var-name prompts and hide timeout, temperature, max-output-token, and similar advanced refinement knobs from the default first-run path
-- [ ] 2.3 Update refinement readiness logic so setup is only marked complete when required base URL, model, and API key inputs are available
+- [x] 2.1 Redesign `uraniborg init` so the normal first-run path asks only for an OpenAI-compatible base URL, an API key, and a model name
+- [x] 2.2 Remove env-var-name prompts and hide timeout, temperature, max-output-token, and similar advanced refinement knobs from the default first-run path
+- [x] 2.3 Update refinement readiness logic so setup is only marked complete when required base URL, model, and API key inputs are available
 
 ## 3. Command Surface Alignment
 

@@ -13,7 +13,30 @@ import type {
 } from "../../src/types/app-config.js";
 
 describe("parseUraniborgConfig", () => {
-  it("accepts a valid refine configuration", () => {
+  it("accepts a valid refine configuration with a stored API key", () => {
+    const result = parseUraniborgConfig({
+      version: 1,
+      refine: {
+        endpoint: {
+          baseUrl: "https://api.example.com/v1",
+          apiKey: "secret-key"
+        },
+        defaults: {
+          model: "gpt-5",
+          temperature: 0.1
+        }
+      }
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.refine.endpoint.timeoutMs).toBe(60000);
+      expect(result.value.refine.defaults.temperature).toBe(0.1);
+    }
+  });
+
+  it("accepts a legacy refine configuration with an API key env var", () => {
     const result = parseUraniborgConfig({
       version: 1,
       refine: {
@@ -50,6 +73,31 @@ describe("parseUraniborgConfig", () => {
 });
 
 describe("resolveUraniborgConfigSecrets", () => {
+  it("uses a stored API key directly", () => {
+    const config: UraniborgConfig = {
+      version: 1,
+      refine: {
+        endpoint: {
+          baseUrl: "https://api.example.com/v1",
+          apiKey: "stored-secret",
+          timeoutMs: 5000
+        },
+        defaults: {
+          model: "gpt-5",
+          temperature: 0.2
+        }
+      }
+    };
+
+    const result = resolveUraniborgConfigSecrets(config, {});
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.refine.endpoint.apiKey).toBe("stored-secret");
+    }
+  });
+
   it("resolves the configured API key env var", () => {
     const config: UraniborgConfig = {
       version: 1,
@@ -104,6 +152,32 @@ describe("resolveUraniborgConfigSecrets", () => {
 });
 
 describe("loadUraniborgConfig", () => {
+  it("loads, validates, and resolves a config file with a stored API key", async () => {
+    const readWriter = createMemoryReadWriter(
+      JSON.stringify({
+        version: 1,
+        refine: {
+          endpoint: {
+            baseUrl: "https://api.example.com/v1",
+            apiKey: "stored-secret"
+          },
+          defaults: {
+            model: "gpt-5"
+          }
+        }
+      })
+    );
+
+    const result = await loadUraniborgConfig("/tmp/config.json", {}, readWriter);
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.refine.endpoint.apiKey).toBe("stored-secret");
+      expect(result.value.refine.endpoint.timeoutMs).toBe(60000);
+    }
+  });
+
   it("loads, validates, and resolves a config file", async () => {
     const readWriter = createMemoryReadWriter(
       JSON.stringify({
@@ -215,7 +289,7 @@ describe("loadUraniborgConfig", () => {
         refine: {
           endpoint: {
             baseUrl: "https://api.example.com/v1",
-            apiKeyEnvVar: "OPENAI_API_KEY",
+            apiKey: "stored-secret",
             timeoutMs: 1000
           },
           defaults: {
@@ -234,7 +308,7 @@ describe("loadUraniborgConfig", () => {
           refine: {
             endpoint: {
               baseUrl: "https://api.example.com/v1",
-              apiKeyEnvVar: "OPENAI_API_KEY",
+              apiKey: "stored-secret",
               timeoutMs: 1000
             },
             defaults: {
