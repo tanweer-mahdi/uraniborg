@@ -18,6 +18,6 @@
 
 ## 4. Validation And Acceptance
 
-- [ ] 4.1 Update automated tests to cover discovered-runtime readiness, missing/incompatible Feynman handling, deterministic multi-install selection reporting, and incomplete refinement setup
-- [ ] 4.2 Add acceptance coverage for first-run `init` completing a runnable refinement configuration using only base URL, API key, and model name in the basic path
-- [ ] 4.3 Re-run and update the UAT setup journey documentation to reflect the new first-run contract and command expectations
+- [x] 4.1 Update automated tests to cover discovered-runtime readiness, missing/incompatible Feynman handling, deterministic multi-install selection reporting, and incomplete refinement setup
+- [x] 4.2 Add acceptance coverage for first-run `init` completing a runnable refinement configuration using only base URL, API key, and model name in the basic path
+- [x] 4.3 Re-run and update the UAT setup journey documentation to reflect the new first-run contract and command expectations

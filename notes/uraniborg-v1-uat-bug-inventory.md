@@ -1,4 +1,15 @@
 # Uraniborg v1 UAT Bug Inventory
+## Status Update - 2026-04-24
+
+The `fix-first-run-setup-contract` change replaced the pinned-runtime bootstrap contract with discovered-runtime readiness and simplified `init` to the minimal base-URL/API-key/model path.
+
+Treat these historical entries as superseded by the new contract and revalidate them against the current implementation before reopening them as active bugs:
+
+- `UAT-001`
+- `UAT-006`
+- `UAT-002`
+- `UAT-003`
+- `UAT-005`
 
 Date created: 2026-04-24
 Purpose: track bugs and notable failures discovered during manual UAT
