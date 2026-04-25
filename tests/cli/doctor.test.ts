@@ -50,12 +50,6 @@ describe("runDoctorCommand", () => {
           stdout: "Web search ready"
         });
       },
-      async getDoctorOutput() {
-        return createExecution({
-          args: ["doctor"],
-          stdout: "Review provider diagnostics"
-        });
-      },
       async loadConfig() {
         return ok({
           version: 1,
@@ -81,11 +75,12 @@ describe("runDoctorCommand", () => {
     expect(lines).toContain(
       "[warn] AlphaXiv is not configured. Latest-paper and paper-metadata access may be weaker. [recommended]"
     );
-    expect(lines).toContain("Feynman Diagnostics");
-    expect(lines).toContain("  Review provider diagnostics");
     expect(lines).toContain(
       "[warn] Uraniborg can run, but recommended research capabilities are missing."
     );
+    expect(lines.some((line) => line.includes("Exit code:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stdout:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stderr:"))).toBe(false);
   });
 });
 

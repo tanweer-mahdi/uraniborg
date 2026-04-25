@@ -39,7 +39,7 @@ describe("runModelsCommand", () => {
       async getAlphaStatus() {
         return createExecution({
           args: ["alpha", "status"],
-          stdout: "AlphaXiv ready"
+          stdout: "AlphaXiv not configured"
         });
       },
       async getSearchStatus() {
@@ -90,9 +90,14 @@ describe("runModelsCommand", () => {
     expect(lines).toContain("[ok] Refinement setup is ready.");
     expect(lines).toContain("Endpoint: https://api.example.com/v1");
     expect(lines).toContain("Default model: gpt-5");
-    expect(lines).toContain(
-      "[warn] Web search is not configured. Latest web research coverage may be weaker."
+    expect(lines.some((line) => line.includes("Recommended Capabilities"))).toBe(
+      false
     );
+    expect(lines.some((line) => line.includes("AlphaXiv"))).toBe(false);
+    expect(lines.some((line) => line.includes("Web search"))).toBe(false);
+    expect(lines.some((line) => line.includes("Exit code:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stdout:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stderr:"))).toBe(false);
   });
 });
 

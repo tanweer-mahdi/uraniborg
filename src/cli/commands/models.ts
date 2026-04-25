@@ -6,7 +6,9 @@ import {
   resolveUraniborgPaths
 } from "../../config/index.js";
 import {
-  classifyFeynmanReadiness,
+  collectFeynmanRuntimeSnapshot,
+  createNodeFeynmanCommandRunner,
+  createSerializedFeynmanCommandRunner,
   getFeynmanAlphaStatus,
   getFeynmanSearchStatus,
   inspectFeynmanRuntime,
@@ -95,37 +97,20 @@ export async function collectModelsReport(
   const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
   const loadParsedConfig =
     dependencies.loadParsedConfig ?? loadParsedUraniborgConfig;
+  const runner = createSerializedFeynmanCommandRunner(
+    dependencies.runner ?? createNodeFeynmanCommandRunner()
+  );
 
   const paths = resolvePaths();
-  const runtimeStatus = await inspectRuntime(
-    dependencies.environment,
-    dependencies.runner
-  );
-  let readinessReport = classifyFeynmanReadiness({
-    runtimeStatus
+  const snapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime,
+    listModels,
+    getAlphaStatus,
+    getSearchStatus,
+    runner,
+    includeReviewModels: true
   });
-
-  if (runtimeStatus.ready) {
-    const runtimeExecutablePath = runtimeStatus.executablePath;
-
-    if (runtimeExecutablePath === undefined) {
-      throw new Error("Ready Feynman runtime did not include an executable path.");
-    }
-
-    const [modelListExecution, alphaStatusExecution, searchStatusExecution] =
-      await Promise.all([
-        listModels(runtimeExecutablePath, dependencies.runner),
-        getAlphaStatus(runtimeExecutablePath, dependencies.runner),
-        getSearchStatus(runtimeExecutablePath, dependencies.runner)
-      ]);
-
-    readinessReport = classifyFeynmanReadiness({
-      runtimeStatus,
-      modelListExecution,
-      alphaStatusExecution,
-      searchStatusExecution
-    });
-  }
 
   const [resolvedConfigResult, parsedConfigResult] = await Promise.all([
     loadConfig(paths.configFile, dependencies.environment, undefined),
@@ -133,8 +118,8 @@ export async function collectModelsReport(
   ]);
 
   return {
-    runtimeStatus,
-    readinessReport,
+    runtimeStatus: snapshot.runtimeStatus,
+    readinessReport: snapshot.readinessReport,
     resolvedConfigResult,
     parsedConfigResult
   };
@@ -166,10 +151,6 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
     lines.push(
       `[fail] ${reviewModelsCheck?.summary ?? "Review model discovery is not ready through the selected Feynman runtime."}`
     );
-
-    for (const detail of reviewModelsCheck?.details ?? []) {
-      lines.push(`  ${detail}`);
-    }
   }
 
   lines.push("", "Refinement");
@@ -197,18 +178,6 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
 
     for (const detail of report.parsedConfigResult.error.details ?? []) {
       lines.push(`  ${detail}`);
-    }
-  }
-
-  const recommendedChecks = report.readinessReport.checks.filter(
-    (check) => check.tier === "recommended"
-  );
-
-  if (recommendedChecks.length > 0) {
-    lines.push("", "Recommended Capabilities");
-
-    for (const check of recommendedChecks) {
-      lines.push(check.ready ? `[ok] ${check.summary}` : `[warn] ${check.summary}`);
     }
   }
 

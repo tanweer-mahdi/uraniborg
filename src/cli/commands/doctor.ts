@@ -6,13 +6,13 @@ import {
   resolveUraniborgPaths
 } from "../../config/index.js";
 import {
-  classifyFeynmanReadiness,
+  collectFeynmanRuntimeSnapshot,
+  createNodeFeynmanCommandRunner,
+  createSerializedFeynmanCommandRunner,
   getFeynmanAlphaStatus,
   getFeynmanSearchStatus,
   inspectFeynmanRuntime,
   listFeynmanModels,
-  runFeynmanDoctor,
-  type FeynmanCommandExecution,
   type FeynmanCommandRunner,
   type FeynmanReadinessReport,
   type FeynmanRuntimeStatus
@@ -45,7 +45,6 @@ export interface DoctorCommandDependencies extends SharedRemediationDependencies
   listModels?: typeof listFeynmanModels;
   getAlphaStatus?: typeof getFeynmanAlphaStatus;
   getSearchStatus?: typeof getFeynmanSearchStatus;
-  getDoctorOutput?: typeof runFeynmanDoctor;
   loadConfig?: typeof loadUraniborgConfig;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
@@ -57,7 +56,6 @@ interface DoctorReport {
   runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
   refineConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
-  feynmanDoctorExecution?: FeynmanCommandExecution | undefined;
 }
 
 export async function runDoctorCommand(
@@ -97,50 +95,23 @@ export async function collectDoctorReport(
     dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
     dependencies.getSearchStatus ?? getFeynmanSearchStatus;
-  const getDoctorOutput =
-    dependencies.getDoctorOutput ?? runFeynmanDoctor;
   const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
+  const runner = createSerializedFeynmanCommandRunner(
+    dependencies.runner ?? createNodeFeynmanCommandRunner()
+  );
 
   const paths = resolvePaths();
   const appHomeStatus = await ensureAppHome(paths);
-  const runtimeStatus = await inspectRuntime(
-    dependencies.environment,
-    dependencies.runner
-  );
-
-  let readinessReport = classifyFeynmanReadiness({
-    runtimeStatus
+  const snapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime,
+    listModels,
+    getAlphaStatus,
+    getSearchStatus,
+    runner,
+    includeReviewModels: true,
+    includeCapabilities: true
   });
-  let feynmanDoctorExecution: FeynmanCommandExecution | undefined;
-
-  if (runtimeStatus.ready) {
-    const runtimeExecutablePath = runtimeStatus.executablePath;
-
-    if (runtimeExecutablePath === undefined) {
-      throw new Error("Ready Feynman runtime did not include an executable path.");
-    }
-
-    const [modelListExecution, alphaStatusExecution, searchStatusExecution] =
-      await Promise.all([
-        listModels(runtimeExecutablePath, dependencies.runner),
-        getAlphaStatus(runtimeExecutablePath, dependencies.runner),
-        getSearchStatus(runtimeExecutablePath, dependencies.runner)
-      ]);
-
-    readinessReport = classifyFeynmanReadiness({
-      runtimeStatus,
-      modelListExecution,
-      alphaStatusExecution,
-      searchStatusExecution
-    });
-
-    if (readinessReport.checks.some((check) => !check.ready)) {
-      feynmanDoctorExecution = await getDoctorOutput(
-        runtimeExecutablePath,
-        dependencies.runner
-      );
-    }
-  }
 
   const refineConfigResult = await loadConfig(
     paths.configFile,
@@ -150,10 +121,9 @@ export async function collectDoctorReport(
 
   return {
     appHomeStatus,
-    runtimeStatus,
-    readinessReport,
-    refineConfigResult,
-    feynmanDoctorExecution
+    runtimeStatus: snapshot.runtimeStatus,
+    readinessReport: snapshot.readinessReport,
+    refineConfigResult
   };
 }
 
@@ -177,7 +147,7 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
       `${prefix} ${check.summary} [${check.tier}]`
     );
 
-    for (const detail of check.details) {
+    for (const detail of selectVisibleDoctorDetails(check.code, check.details)) {
       lines.push(`  ${detail}`);
     }
   }
@@ -202,17 +172,6 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
     }
   }
 
-  if (
-    report.feynmanDoctorExecution !== undefined &&
-    hasVisibleDoctorOutput(report.feynmanDoctorExecution)
-  ) {
-    lines.push("", "Feynman Diagnostics");
-
-    for (const detail of describeDoctorExecution(report.feynmanDoctorExecution)) {
-      lines.push(detail);
-    }
-  }
-
   lines.push("", "Summary");
 
   const blockingIssues =
@@ -231,46 +190,30 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
   return lines;
 }
 
+function selectVisibleDoctorDetails(
+  code: string,
+  details: readonly string[]
+): readonly string[] {
+  if (code === "runtime") {
+    return details.filter(
+      (detail) =>
+        detail.startsWith("Version:") || detail.startsWith("Multiple compatible")
+    );
+  }
+
+  if (code === "review_models") {
+    return details.filter((detail) => detail.startsWith("Models:"));
+  }
+
+  return [];
+}
+
 function formatStatusLine(
   ready: boolean,
   successMessage: string,
   failureMessage: string
 ): string {
   return ready ? `[ok] ${successMessage}` : `[fail] ${failureMessage}`;
-}
-
-function hasVisibleDoctorOutput(execution: FeynmanCommandExecution): boolean {
-  return (
-    execution.stdout.trim().length > 0 ||
-    execution.stderr.trim().length > 0 ||
-    execution.exitCode !== 0
-  );
-}
-
-function describeDoctorExecution(
-  execution: FeynmanCommandExecution
-): readonly string[] {
-  const lines = [`Exit code: ${execution.exitCode}`];
-  const stdout = execution.stdout.trim();
-  const stderr = execution.stderr.trim();
-
-  if (stdout.length > 0) {
-    lines.push("stdout:");
-
-    for (const line of stdout.split(/\r?\n/u)) {
-      lines.push(`  ${line}`);
-    }
-  }
-
-  if (stderr.length > 0) {
-    lines.push("stderr:");
-
-    for (const line of stderr.split(/\r?\n/u)) {
-      lines.push(`  ${line}`);
-    }
-  }
-
-  return lines;
 }
 
 function isInteractiveTerminal(): boolean {
