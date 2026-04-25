@@ -353,3 +353,51 @@ Suggested statuses:
 
 - retest `doctor`, `models`, and the broader first-run UAT flow against a repaired Feynman installation
 - confirm that the previous corruption sequence cannot be reproduced from Uraniborg alone
+
+## UAT-OBS-011 - `init` is not an intuitive command for changing the revision model
+
+- Date: 2026-04-25
+- Category: copy
+- Status: confirmed
+- UAT case: refinement-model configuration discoverability
+- Command: `node dist/src/cli/main.js init`
+
+### Observation
+
+- The current command name `init` reads as a one-time initialization action.
+- It does not intuitively signal that the same command is also the place to change the saved refinement model later.
+- From an operator perspective, a more explicit command such as `set-revise-model` would better communicate intent.
+
+### Evidence
+
+- The current CLI surface requires the user to revisit `init` to change the saved default refinement model.
+- That behavior is not obvious from the command name alone.
+
+### Recommendation
+
+- Treat command naming here as a UX discoverability issue.
+- Consider replacing or supplementing `init` with a more explicit model-setting command surface, for example `set-revise-model`.
+
+## UAT-OBS-012 - `refinement` terminology should be replaced by `revision` in the setup flow
+
+- Date: 2026-04-25
+- Category: copy
+- Status: confirmed
+- UAT case: setup-flow wording review
+- Command: `node dist/src/cli/main.js init`
+
+### Observation
+
+- The setup interface is otherwise strong, but the current use of `refinement` feels like internal terminology.
+- `revision` would be clearer and more natural in the user-facing setup flow.
+
+### Evidence
+
+- The current `init` interface uses wording such as:
+  - `Uraniborg refinement setup`
+  - `Default refinement model`
+
+### Recommendation
+
+- Replace user-facing `refinement` wording with `revision` in the setup flow.
+- Keep internal implementation terminology separate from the product-facing CLI copy where possible.
