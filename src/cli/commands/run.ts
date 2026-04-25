@@ -17,8 +17,10 @@ import {
 } from "../../config/index.js";
 import { executeRunLifecycle, type RunExecutionDependencies } from "../../loop/index.js";
 import {
+  collectFeynmanRuntimeSnapshot,
   classifyFeynmanReadiness,
   createNodeFeynmanCommandRunner,
+  createSerializedFeynmanCommandRunner,
   getFeynmanAlphaStatus,
   getFeynmanSearchStatus,
   inspectFeynmanRuntime,
@@ -127,7 +129,9 @@ export async function runRunCommand(
     select,
     text
   };
-  const runner = dependencies.runner ?? createNodeFeynmanCommandRunner();
+  const runner = createSerializedFeynmanCommandRunner(
+    dependencies.runner ?? createNodeFeynmanCommandRunner()
+  );
 
   const preparedInput = await prepareRunInput(
     file,
@@ -283,13 +287,13 @@ export async function prepareRunEnvironment(
 
   dependencies.writeLine("Uraniborg checks the discovered review runtime...");
 
-  let runtimeStatus = await dependencies.inspectRuntime(
-    dependencies.environment,
-    dependencies.runner
-  );
-  const runtimeReadiness = classifyFeynmanReadiness({
-    runtimeStatus
+  let runtimeSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    runner: dependencies.runner
   });
+  let runtimeStatus = runtimeSnapshot.runtimeStatus;
+  const runtimeReadiness = runtimeSnapshot.readinessReport;
 
   await promptAndRunRemediations({
     executablePath: runtimeStatus.executablePath,
@@ -307,16 +311,17 @@ export async function prepareRunEnvironment(
     }
   });
 
-  runtimeStatus = await dependencies.inspectRuntime(
-    dependencies.environment,
-    dependencies.runner
-  );
+  runtimeSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    runner: dependencies.runner
+  });
+  runtimeStatus = runtimeSnapshot.runtimeStatus;
 
   if (!runtimeStatus.ready) {
     throw new Error(
-      classifyFeynmanReadiness({
-        runtimeStatus
-      }).checks[0]?.summary ?? "Compatible Feynman runtime is not ready."
+      runtimeSnapshot.readinessReport.checks[0]?.summary ??
+        "Compatible Feynman runtime is not ready."
     );
   }
 
@@ -337,14 +342,15 @@ export async function prepareRunEnvironment(
     );
   }
 
-  let modelListExecution = await dependencies.listModels(
-    requireRuntimeExecutablePath(runtimeStatus),
-    dependencies.runner
-  );
-  let discoveryReadiness = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution
+  let discoverySnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    runner: dependencies.runner,
+    includeReviewModels: true
   });
+  let modelListExecution = discoverySnapshot.modelListExecution;
+  let discoveryReadiness = discoverySnapshot.readinessReport;
 
   await promptAndRunRemediations({
     executablePath: runtimeStatus.executablePath,
@@ -359,14 +365,15 @@ export async function prepareRunEnvironment(
     }
   });
 
-  modelListExecution = await dependencies.listModels(
-    requireRuntimeExecutablePath(runtimeStatus),
-    dependencies.runner
-  );
-  discoveryReadiness = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution
+  discoverySnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    runner: dependencies.runner,
+    includeReviewModels: true
   });
+  modelListExecution = discoverySnapshot.modelListExecution;
+  discoveryReadiness = discoverySnapshot.readinessReport;
 
   if (!discoveryReadiness.requiredReady || discoveryReadiness.reviewModels.length === 0) {
     throw new Error(
@@ -392,21 +399,18 @@ export async function prepareRunEnvironment(
     }
   );
 
-  let alphaStatusExecution = await dependencies.getAlphaStatus(
-    requireRuntimeExecutablePath(runtimeStatus),
-    dependencies.runner
-  );
-  let searchStatusExecution = await dependencies.getSearchStatus(
-    requireRuntimeExecutablePath(runtimeStatus),
-    dependencies.runner
-  );
-  let readinessReport = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution,
-    selectedReviewModel: reviewModel,
-    alphaStatusExecution,
-    searchStatusExecution
+  let readinessSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
+    runner: dependencies.runner,
+    includeReviewModels: true,
+    includeCapabilities: true,
+    selectedReviewModel: reviewModel
   });
+  let readinessReport = readinessSnapshot.readinessReport;
 
   await promptAndRunRemediations({
     executablePath: runtimeStatus.executablePath,
@@ -421,25 +425,18 @@ export async function prepareRunEnvironment(
     }
   });
 
-  modelListExecution = await dependencies.listModels(
-    requireRuntimeExecutablePath(runtimeStatus),
-    dependencies.runner
-  );
-  alphaStatusExecution = await dependencies.getAlphaStatus(
-    requireRuntimeExecutablePath(runtimeStatus),
-    dependencies.runner
-  );
-  searchStatusExecution = await dependencies.getSearchStatus(
-    requireRuntimeExecutablePath(runtimeStatus),
-    dependencies.runner
-  );
-  readinessReport = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution,
-    selectedReviewModel: reviewModel,
-    alphaStatusExecution,
-    searchStatusExecution
+  readinessSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
+    runner: dependencies.runner,
+    includeReviewModels: true,
+    includeCapabilities: true,
+    selectedReviewModel: reviewModel
   });
+  readinessReport = readinessSnapshot.readinessReport;
 
   if (!readinessReport.requiredReady) {
     const requiredFailure = readinessReport.checks.find(

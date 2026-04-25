@@ -15,6 +15,7 @@ import {
 import { resumeRunLifecycle } from "../../loop/index.js";
 import { readRunManifest, resolveRunArtifactPaths } from "../../run/index.js";
 import {
+  createSerializedFeynmanCommandRunner,
   createNodeFeynmanCommandRunner,
   getFeynmanAlphaStatus,
   getFeynmanSearchStatus,
@@ -53,7 +54,9 @@ export async function runResumeCommand(
   dependencies: RunCommandDependencies = {}
 ): Promise<void> {
   const writeLine = dependencies.writeLine ?? writeInfo;
-  const runner = dependencies.runner ?? createNodeFeynmanCommandRunner();
+  const runner = createSerializedFeynmanCommandRunner(
+    dependencies.runner ?? createNodeFeynmanCommandRunner()
+  );
   const interactive =
     dependencies.interactive ?? !(options.nonInteractive ?? false);
   const prompts = dependencies.prompts ?? {
