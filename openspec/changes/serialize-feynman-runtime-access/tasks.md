@@ -14,4 +14,4 @@
 
 - [x] 3.1 Add regression coverage proving Uraniborg does not overlap Feynman subprocess launches during discovery and readiness collection
 - [x] 3.2 Add command-level tests for consistent `doctor`/`models` readiness facts and curated default output
-- [ ] 3.3 Update UAT-facing notes and session handoff context for the Feynman corruption RCA and the Uraniborg-side mitigation
+- [x] 3.3 Update UAT-facing notes and session handoff context for the Feynman corruption RCA and the Uraniborg-side mitigation
