@@ -7,7 +7,7 @@ Related docs:
 - [uraniborg-v1-uat-plan.md](./uraniborg-v1-uat-plan.md)
 - [uraniborg-v1-uat-instructions.md](./uraniborg-v1-uat-instructions.md)
 - [uraniborg-v1-uat-resume-instructions.md](./uraniborg-v1-uat-resume-instructions.md)
-- [uraniborg-v1-uat-bug-inventory.md](./uraniborg-v1-uat-bug-inventory.md)
+- [uraniborg-v1-uat-bug-inventory.md](./archive/uat/uraniborg-v1-uat-bug-inventory.md)
 
 ## Session Rule For This File
 
