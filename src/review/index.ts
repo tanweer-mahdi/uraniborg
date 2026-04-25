@@ -1,4 +1,10 @@
 export {
+  collectFeynmanRuntimeSnapshot,
+  createSerializedFeynmanCommandRunner,
+  type FeynmanRuntimeSnapshot,
+  type FeynmanRuntimeSnapshotOptions
+} from "./feynman-runtime.js";
+export {
   createNodeFeynmanCommandRunner,
   createNodeFeynmanRuntimeFilesystem,
   findFeynmanExecutablesOnPath,

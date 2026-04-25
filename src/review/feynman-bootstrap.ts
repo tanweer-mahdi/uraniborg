@@ -175,11 +175,11 @@ export async function inspectFeynmanRuntime(
     };
   }
 
-  const candidates = await Promise.all(
-    executablePaths.map(async (executablePath) =>
-      inspectRuntimeCandidate(executablePath, runner)
-    )
-  );
+  const candidates: FeynmanRuntimeCandidate[] = [];
+
+  for (const executablePath of executablePaths) {
+    candidates.push(await inspectRuntimeCandidate(executablePath, runner));
+  }
   const compatibleCandidates = candidates.filter((candidate) => candidate.compatible);
   const selectedCandidate = compatibleCandidates[0];
 
