@@ -55,14 +55,21 @@ describe("runInitCommand", () => {
       async saveConfig(_configFilePath, config) {
         savedConfig = config;
       },
-      prompts: createPromptHarness([
-        "https://api.example.com/v1",
-        "secret-key",
-        "gpt-5.4"
-      ], promptsAsked)
+      prompts: createPromptHarness(
+        {
+          selectAnswers: ["manual"],
+          textAnswers: [
+            "https://api.example.com/v1",
+            "secret-key",
+            "gpt-5.4"
+          ]
+        },
+        promptsAsked
+      )
     });
 
     expect(promptsAsked).toEqual([
+      "Which revision provider should Uraniborg use?",
       "OpenAI-compatible revision endpoint URL",
       "Revision API key",
       "Default revision model"
@@ -140,11 +147,17 @@ describe("runInitCommand", () => {
       async saveConfig(_configFilePath, config) {
         savedConfig = config;
       },
-      prompts: createPromptHarness([
-        "https://api.example.com/v1",
-        "secret-key",
-        "gpt-5.4"
-      ], [])
+      prompts: createPromptHarness(
+        {
+          selectAnswers: ["manual"],
+          textAnswers: [
+            "https://api.example.com/v1",
+            "secret-key",
+            "gpt-5.4"
+          ]
+        },
+        []
+      )
     });
 
     expect(savedConfig).toEqual({
@@ -166,10 +179,14 @@ describe("runInitCommand", () => {
 });
 
 function createPromptHarness(
-  answers: string[],
+  answers: {
+    selectAnswers: string[];
+    textAnswers: string[];
+  },
   promptsAsked: string[]
 ): NonNullable<InitCommandDependencies["prompts"]> {
-  const remainingAnswers = [...answers];
+  const remainingSelectAnswers = [...answers.selectAnswers];
+  const remainingTextAnswers = [...answers.textAnswers];
 
   return {
     intro() {
@@ -181,9 +198,27 @@ function createPromptHarness(
     cancel() {
       return undefined;
     },
+    async select(options) {
+      promptsAsked.push(options.message);
+      const answer = remainingSelectAnswers.shift();
+
+      if (typeof answer !== "string") {
+        throw new Error(`No answer queued for prompt "${options.message}".`);
+      }
+
+      const matchedOption = options.options.find(
+        (option) => option.value === answer
+      );
+
+      if (matchedOption === undefined) {
+        throw new Error(`Unsupported select answer "${answer}".`);
+      }
+
+      return matchedOption.value;
+    },
     async text(options) {
       promptsAsked.push(options.message);
-      const answer = remainingAnswers.shift();
+      const answer = remainingTextAnswers.shift();
 
       if (typeof answer !== "string") {
         throw new Error(`No answer queued for prompt "${options.message}".`);

@@ -35,13 +35,17 @@ describe("runRevisionCommand", () => {
           savedConfig = config;
         },
         prompts: createPromptHarness(
-          ["https://api.example.com/v1", "secret-key", "gpt-5.4"],
+          {
+            selectAnswers: ["manual"],
+            textAnswers: ["https://api.example.com/v1", "secret-key", "gpt-5.4"]
+          },
           promptsAsked
         )
       }
     );
 
     expect(promptsAsked).toEqual([
+      "Which revision provider should Uraniborg use?",
       "OpenAI-compatible revision endpoint URL",
       "Revision API key",
       "Default revision model"
@@ -60,6 +64,50 @@ describe("runRevisionCommand", () => {
         }
       }
     });
+  });
+
+  it("uses the built-in endpoint when ChatGPT is selected", async () => {
+    const promptsAsked: string[] = [];
+    let savedConfig: UraniborgConfig | undefined;
+
+    await runRevisionCommand(
+      {
+        setup: true
+      },
+      {
+        resolvePaths() {
+          return createPaths();
+        },
+        async ensureAppHome(paths) {
+          return createAppHomeStatus(paths);
+        },
+        async loadConfig() {
+          return err({
+            code: "config_not_found",
+            message: "missing"
+          });
+        },
+        async saveConfig(_configFilePath, config) {
+          savedConfig = config;
+        },
+        prompts: createPromptHarness(
+          {
+            selectAnswers: ["chatgpt"],
+            textAnswers: ["secret-key", "gpt-5.4"]
+          },
+          promptsAsked
+        )
+      }
+    );
+
+    expect(promptsAsked).toEqual([
+      "Which revision provider should Uraniborg use?",
+      "Revision API key",
+      "Default revision model"
+    ]);
+    expect(savedConfig?.refine.endpoint.baseUrl).toBe(
+      "https://api.openai.com/v1"
+    );
   });
 
   it("requires exactly one revision command mode", async () => {
@@ -168,10 +216,14 @@ describe("runRevisionConfigCommand", () => {
 });
 
 function createPromptHarness(
-  answers: string[],
+  answers: {
+    selectAnswers: string[];
+    textAnswers: string[];
+  },
   promptsAsked: string[]
 ): NonNullable<RevisionSetupDependencies["prompts"]> {
-  const remainingAnswers = [...answers];
+  const remainingSelectAnswers = [...answers.selectAnswers];
+  const remainingTextAnswers = [...answers.textAnswers];
 
   return {
     intro() {
@@ -183,9 +235,27 @@ function createPromptHarness(
     cancel() {
       return undefined;
     },
+    async select(options) {
+      promptsAsked.push(options.message);
+      const answer = remainingSelectAnswers.shift();
+
+      if (typeof answer !== "string") {
+        throw new Error(`No answer queued for prompt "${options.message}".`);
+      }
+
+      const matchedOption = options.options.find(
+        (option) => option.value === answer
+      );
+
+      if (matchedOption === undefined) {
+        throw new Error(`Unsupported select answer "${answer}".`);
+      }
+
+      return matchedOption.value;
+    },
     async text(options) {
       promptsAsked.push(options.message);
-      const answer = remainingAnswers.shift();
+      const answer = remainingTextAnswers.shift();
 
       if (typeof answer !== "string") {
         throw new Error(`No answer queued for prompt "${options.message}".`);

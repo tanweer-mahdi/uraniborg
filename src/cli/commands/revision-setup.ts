@@ -3,6 +3,7 @@ import {
   intro,
   isCancel,
   outro,
+  select,
   text
 } from "@clack/prompts";
 
@@ -18,6 +19,7 @@ export interface RevisionSetupPrompts {
   intro: typeof intro;
   outro: typeof outro;
   cancel: typeof cancel;
+  select: typeof select;
   text: typeof text;
   isCancel: typeof isCancel;
 }
@@ -41,6 +43,7 @@ export async function runGuidedRevisionSetup(
     intro,
     outro,
     cancel,
+    select,
     text,
     isCancel
   };
@@ -52,19 +55,13 @@ export async function runGuidedRevisionSetup(
 
   prompts.intro("Uraniborg revision setup");
 
-  const baseUrl = await promptText(
-    {
-      message: "OpenAI-compatible revision endpoint URL",
-      initialValue: initialConfig.refine.endpoint.baseUrl,
-      validate(value) {
-        try {
-          new URL(value);
-          return undefined;
-        } catch {
-          return "Enter a valid absolute URL.";
-        }
-      }
-    },
+  const provider = await promptRevisionProvider(
+    initialConfig.refine.endpoint.baseUrl,
+    prompts
+  );
+  const baseUrl = await resolveRevisionEndpointUrl(
+    provider,
+    initialConfig.refine.endpoint.baseUrl,
     prompts
   );
   const apiKey = await promptText(
@@ -168,4 +165,118 @@ async function promptText(
   }
 
   return response;
+}
+
+type RevisionEndpointProvider =
+  | "chatgpt"
+  | "gemini"
+  | "anthropic"
+  | "manual";
+
+const CHATGPT_REVISION_ENDPOINT = "https://api.openai.com/v1";
+const GEMINI_REVISION_ENDPOINT =
+  "https://generativelanguage.googleapis.com/v1beta/openai/";
+const ANTHROPIC_REVISION_ENDPOINT = "https://api.anthropic.com/v1/";
+
+async function promptRevisionProvider(
+  initialBaseUrl: string,
+  prompts: RevisionSetupPrompts
+): Promise<RevisionEndpointProvider> {
+  const response = await prompts.select({
+    message: "Which revision provider should Uraniborg use?",
+    options: [
+      {
+        value: "chatgpt",
+        label: "ChatGPT",
+        hint: CHATGPT_REVISION_ENDPOINT
+      },
+      {
+        value: "gemini",
+        label: "Gemini",
+        hint: GEMINI_REVISION_ENDPOINT
+      },
+      {
+        value: "anthropic",
+        label: "Anthropic",
+        hint: ANTHROPIC_REVISION_ENDPOINT
+      },
+      {
+        value: "manual",
+        label: "Manual OpenAI-compatible endpoint",
+        hint: "Enter a custom OpenAI-compatible revision endpoint URL."
+      }
+    ],
+    initialValue: inferRevisionProvider(initialBaseUrl)
+  });
+
+  if (prompts.isCancel(response)) {
+    prompts.cancel("Uraniborg revision setup cancelled.");
+    throw new Error("Uraniborg revision setup cancelled.");
+  }
+
+  if (!isRevisionEndpointProvider(response)) {
+    throw new Error("Selected revision provider is not supported.");
+  }
+
+  return response;
+}
+
+async function resolveRevisionEndpointUrl(
+  provider: RevisionEndpointProvider,
+  initialBaseUrl: string,
+  prompts: RevisionSetupPrompts
+): Promise<string> {
+  switch (provider) {
+    case "chatgpt":
+      return CHATGPT_REVISION_ENDPOINT;
+    case "gemini":
+      return GEMINI_REVISION_ENDPOINT;
+    case "anthropic":
+      return ANTHROPIC_REVISION_ENDPOINT;
+    case "manual":
+      return promptText(
+        {
+          message: "OpenAI-compatible revision endpoint URL",
+          initialValue: initialBaseUrl,
+          validate(value) {
+            try {
+              new URL(value);
+              return undefined;
+            } catch {
+              return "Enter a valid absolute URL.";
+            }
+          }
+        },
+        prompts
+      );
+  }
+}
+
+function inferRevisionProvider(
+  baseUrl: string
+): RevisionEndpointProvider {
+  if (baseUrl === CHATGPT_REVISION_ENDPOINT) {
+    return "chatgpt";
+  }
+
+  if (baseUrl === GEMINI_REVISION_ENDPOINT) {
+    return "gemini";
+  }
+
+  if (baseUrl === ANTHROPIC_REVISION_ENDPOINT) {
+    return "anthropic";
+  }
+
+  return "manual";
+}
+
+function isRevisionEndpointProvider(
+  value: unknown
+): value is RevisionEndpointProvider {
+  return (
+    value === "chatgpt" ||
+    value === "gemini" ||
+    value === "anthropic" ||
+    value === "manual"
+  );
 }
