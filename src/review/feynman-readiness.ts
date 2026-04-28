@@ -6,6 +6,7 @@ import type {
 import {
   createAlphaLoginRemediationAction,
   createModelLoginRemediationAction,
+  createSearchConfigurationRemediationAction,
   createSetupRemediationAction,
   type FeynmanRemediationAction
 } from "./feynman-remediation.js";
@@ -274,7 +275,7 @@ export function createRecommendedCapabilityCheck(
         ? createAlphaLoginRemediationAction(
             "Configure AlphaXiv access for stronger paper discovery."
           )
-        : createSetupRemediationAction(
+        : createSearchConfigurationRemediationAction(
             "Configure web-search providers for fresher web research coverage."
           )
   };

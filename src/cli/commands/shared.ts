@@ -1,14 +1,18 @@
 import {
   cancel,
   confirm,
-  isCancel
+  isCancel,
+  select,
+  text
 } from "@clack/prompts";
 
 import {
+  createSearchConfigurationRemediationAction,
   describeFeynmanRemediationAction,
   launchFeynmanRemediationAction,
   type FeynmanInteractiveLauncher,
-  type FeynmanRemediationAction
+  type FeynmanRemediationAction,
+  type FeynmanSearchProvider
 } from "../../review/index.js";
 import { createOperationCancelledError } from "../../types/cancellation.js";
 import { writeInfo } from "../../ui/output.js";
@@ -17,6 +21,8 @@ export interface RemediationPrompts {
   confirm: typeof confirm;
   cancel: typeof cancel;
   isCancel: typeof isCancel;
+  select?: typeof select;
+  text?: typeof text;
 }
 
 export interface SharedRemediationDependencies {
@@ -65,7 +71,9 @@ export async function promptAndRunRemediations(options: {
   const prompts = options.dependencies.prompts ?? {
     confirm,
     cancel,
-    isCancel
+    isCancel,
+    select,
+    text
   };
   const writeLine = options.dependencies.writeLine ?? writeInfo;
 
@@ -78,8 +86,8 @@ export async function promptAndRunRemediations(options: {
     }
 
     const response = await prompts.confirm({
-      message: `${action.reason} Launch ${describeFeynmanRemediationAction(action)} now?`,
-      initialValue: true
+      message: `${action.reason} ${buildRemediationPromptQuestion(action)}`,
+      initialValue: action.promptInitialValue ?? true
     });
 
     if (prompts.isCancel(response)) {
@@ -91,18 +99,26 @@ export async function promptAndRunRemediations(options: {
       continue;
     }
 
+    const resolvedAction = await resolveRemediationAction(action, prompts);
+    const actionLabel = describeRemediationOutcomeLabel(resolvedAction);
+
     writeLine(
-      `Launching ${describeFeynmanRemediationAction(action)} via the selected Feynman runtime...`
+      `Launching ${actionLabel} via the selected Feynman runtime...`
     );
 
     const launchResult = await launchFeynmanRemediationAction(
       options.executablePath,
-      action,
+      resolvedAction,
       options.dependencies.launcher
     );
 
+    if (launchResult.exitCode === 0) {
+      writeLine(`${actionLabel} completed successfully.`);
+      continue;
+    }
+
     writeLine(
-      `Finished ${describeFeynmanRemediationAction(action)} with exit code ${launchResult.exitCode}.`
+      `${actionLabel} did not complete successfully. Review the Feynman prompt and rerun the command if more setup is still required.`
     );
   }
 }
@@ -117,6 +133,8 @@ function dedupeRemediationActions(
     const key =
       action.kind === "model_login"
         ? `${action.kind}:${action.provider ?? ""}`
+        : action.kind === "search_configure"
+          ? `${action.kind}:${action.provider ?? ""}`
         : action.kind;
 
     if (seen.has(key)) {
@@ -128,4 +146,130 @@ function dedupeRemediationActions(
   }
 
   return deduped;
+}
+
+async function resolveRemediationAction(
+  action: FeynmanRemediationAction,
+  prompts: RemediationPrompts
+): Promise<FeynmanRemediationAction> {
+  if (action.kind !== "search_configure" || typeof action.provider === "string") {
+    return action;
+  }
+
+  const selectPrompt = prompts.select ?? select;
+  const textPrompt = prompts.text ?? text;
+
+  const providerResponse = await selectPrompt({
+    message: "Which web-search provider should Feynman configure?",
+    options: [
+      {
+        value: "auto",
+        label: "auto",
+        hint: "Use Feynman's automatic provider selection."
+      },
+      {
+        value: "perplexity",
+        label: "perplexity",
+        hint: "Configure the Perplexity web-search provider."
+      },
+      {
+        value: "exa",
+        label: "exa",
+        hint: "Configure the Exa web-search provider."
+      },
+      {
+        value: "gemini",
+        label: "gemini",
+        hint: "Configure the Gemini web-search provider."
+      }
+    ],
+    initialValue: "auto"
+  });
+
+  if (prompts.isCancel(providerResponse)) {
+    prompts.cancel("Skipped Feynman remediation.");
+    throw new Error("Feynman remediation cancelled.");
+  }
+
+  if (!isFeynmanSearchProvider(providerResponse)) {
+    throw new Error("Selected web-search provider is not supported.");
+  }
+
+  const provider = providerResponse;
+
+  if (provider === "auto") {
+    return createSearchConfigurationRemediationAction(action.reason, {
+      provider,
+      promptInitialValue: action.promptInitialValue
+    });
+  }
+
+  const apiKeyResponse = await textPrompt({
+    message: `API key for ${provider} (optional if Feynman already has one configured)`,
+    defaultValue: "",
+    validate() {
+      return undefined;
+    }
+  });
+
+  if (prompts.isCancel(apiKeyResponse)) {
+    prompts.cancel("Skipped Feynman remediation.");
+    throw new Error("Feynman remediation cancelled.");
+  }
+
+  const apiKey = apiKeyResponse.trim();
+
+  return createSearchConfigurationRemediationAction(action.reason, {
+    provider,
+    ...(apiKey.length > 0 ? { apiKey } : {}),
+    promptInitialValue: action.promptInitialValue
+  });
+}
+
+function isFeynmanSearchProvider(
+  value: unknown
+): value is FeynmanSearchProvider {
+  return (
+    value === "auto" ||
+    value === "perplexity" ||
+    value === "exa" ||
+    value === "gemini"
+  );
+}
+
+function buildRemediationPromptQuestion(
+  action: FeynmanRemediationAction
+): string {
+  switch (action.kind) {
+    case "install_or_expose_runtime":
+      return "Run Feynman setup now once a compatible runtime is available?";
+    case "setup":
+      return "Launch Feynman setup now?";
+    case "model_login":
+      return `Launch Feynman model login${typeof action.provider === "string" ? ` for "${action.provider}"` : ""} now?`;
+    case "alpha_login":
+      return "Launch Feynman AlphaXiv login now?";
+    case "search_configure":
+      return "Configure Feynman web-search providers now?";
+  }
+}
+
+function describeRemediationOutcomeLabel(
+  action: FeynmanRemediationAction
+): string {
+  switch (action.kind) {
+    case "install_or_expose_runtime":
+    case "setup":
+      return "Feynman setup";
+    case "model_login":
+      return typeof action.provider === "string"
+        ? `Feynman model login for "${action.provider}"`
+        : "Feynman model login";
+    case "alpha_login":
+      return "Feynman AlphaXiv login";
+    case "search_configure":
+      return typeof action.provider === "string"
+        ? `Feynman web-search provider configuration for "${action.provider}"`
+        : "Feynman web-search provider configuration";
+  }
 }

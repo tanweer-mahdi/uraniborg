@@ -4,6 +4,12 @@ import {
   type FeynmanCommandRunner
 } from "./feynman-bootstrap.js";
 
+export type FeynmanSearchProvider =
+  | "auto"
+  | "perplexity"
+  | "exa"
+  | "gemini";
+
 export async function getFeynmanVersion(
   executablePath: string,
   runner?: FeynmanCommandRunner
@@ -74,6 +80,20 @@ export async function runFeynmanAlphaLogin(
   return runFeynmanCommand(executablePath, ["alpha", "login"], undefined, runner);
 }
 
+export async function runFeynmanSearchSet(
+  executablePath: string,
+  provider: FeynmanSearchProvider,
+  apiKey?: string,
+  runner?: FeynmanCommandRunner
+): Promise<FeynmanCommandExecution> {
+  return runFeynmanCommand(
+    executablePath,
+    getFeynmanSearchSetCommand(provider, apiKey),
+    undefined,
+    runner
+  );
+}
+
 export async function runFeynmanDoctor(
   executablePath: string,
   runner?: FeynmanCommandRunner
@@ -98,4 +118,16 @@ export function getFeynmanModelLoginCommand(
 
 export function getFeynmanDoctorCommand(): readonly string[] {
   return ["doctor"];
+}
+
+export function getFeynmanSearchSetCommand(
+  provider: FeynmanSearchProvider,
+  apiKey?: string
+): readonly string[] {
+  return [
+    "search",
+    "set",
+    provider,
+    ...(typeof apiKey === "string" && apiKey.length > 0 ? [apiKey] : [])
+  ];
 }

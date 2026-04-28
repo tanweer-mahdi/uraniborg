@@ -5,12 +5,14 @@ import {
   getFeynmanDoctorCommand,
   getFeynmanModelLoginCommand,
   getFeynmanSearchStatus,
+  getFeynmanSearchSetCommand,
   getFeynmanSetupCommand,
   getFeynmanVersion,
   listFeynmanModels,
   runFeynmanAlphaLogin,
   runFeynmanDoctor,
   runFeynmanModelLogin,
+  runFeynmanSearchSet,
   runFeynmanSetup
 } from "../../src/review/feynman-models.js";
 import type {
@@ -49,6 +51,7 @@ describe("feynman status primitives", () => {
     await runFeynmanSetup(executablePath, runner);
     await runFeynmanModelLogin(executablePath, "openai", runner);
     await runFeynmanAlphaLogin(executablePath, runner);
+    await runFeynmanSearchSet(executablePath, "exa", "search-key", runner);
     await runFeynmanDoctor(executablePath, runner);
 
     expect(calls).toEqual([
@@ -82,6 +85,10 @@ describe("feynman status primitives", () => {
       },
       {
         executablePath,
+        args: ["search", "set", "exa", "search-key"]
+      },
+      {
+        executablePath,
         args: ["doctor"]
       }
     ]);
@@ -93,6 +100,11 @@ describe("feynman status primitives", () => {
       "model",
       "login",
       "anthropic"
+    ]);
+    expect(getFeynmanSearchSetCommand("auto")).toEqual([
+      "search",
+      "set",
+      "auto"
     ]);
     expect(getFeynmanDoctorCommand()).toEqual(["doctor"]);
   });

@@ -7,6 +7,7 @@ import {
 } from "../../config/index.js";
 import {
   collectFeynmanRuntimeSnapshot,
+  createSearchConfigurationRemediationAction,
   createNodeFeynmanCommandRunner,
   createSerializedFeynmanCommandRunner,
   getFeynmanAlphaStatus,
@@ -82,6 +83,30 @@ export async function runDoctorCommand(
       writeLine
     }
   });
+
+  const webSearchCheck = report.readinessReport.checks.find(
+    (check) => check.code === "web_search"
+  );
+
+  if (report.runtimeStatus.ready && webSearchCheck?.ready) {
+    await promptAndRunRemediations({
+      executablePath: report.runtimeStatus.executablePath,
+      actions: [
+        createSearchConfigurationRemediationAction(
+          "Manage web-search providers for fresher web research coverage.",
+          {
+            promptInitialValue: false
+          }
+        )
+      ],
+      dependencies: {
+        interactive: dependencies.interactive ?? isInteractiveTerminal(),
+        launcher: dependencies.launcher,
+        prompts: dependencies.prompts,
+        writeLine
+      }
+    });
+  }
 }
 
 export async function collectDoctorReport(
@@ -152,13 +177,13 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
     }
   }
 
-  lines.push("", "Refinement Readiness");
+  lines.push("", "Revision Readiness");
 
   if (report.refineConfigResult.ok) {
     lines.push(
       formatStatusLine(
         true,
-        `Refinement setup is ready. Model: ${report.refineConfigResult.value.refine.defaults.model}. Endpoint: ${report.refineConfigResult.value.refine.endpoint.baseUrl}`,
+        `Revision setup is ready. Model: ${report.refineConfigResult.value.refine.defaults.model}. Endpoint: ${report.refineConfigResult.value.refine.endpoint.baseUrl}`,
         ""
       )
     );

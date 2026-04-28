@@ -24,6 +24,7 @@ export {
   createAlphaLoginRemediationAction,
   createModelLoginRemediationAction,
   createRuntimeInstallRemediationAction,
+  createSearchConfigurationRemediationAction,
   createSetupRemediationAction,
   describeFeynmanRemediationAction,
   getFeynmanRemediationCommand,
@@ -52,13 +53,16 @@ export {
   getFeynmanDoctorCommand,
   getFeynmanModelLoginCommand,
   getFeynmanSearchStatus,
+  getFeynmanSearchSetCommand,
   getFeynmanSetupCommand,
   getFeynmanVersion,
   listFeynmanModels,
+  runFeynmanSearchSet,
   runFeynmanAlphaLogin,
   runFeynmanDoctor,
   runFeynmanModelLogin,
-  runFeynmanSetup
+  runFeynmanSetup,
+  type FeynmanSearchProvider
 } from "./feynman-models.js";
 export {
   REVIEW_OUTPUTS_DIRECTORY_NAME,

@@ -168,7 +168,7 @@ describe("classifyFeynmanReadiness", () => {
     expect(notReadyCheck.ready).toBe(false);
     expect(notReadyCheck.remediation).toEqual(
       expect.objectContaining({
-        kind: "setup"
+        kind: "search_configure"
       })
     );
   });
