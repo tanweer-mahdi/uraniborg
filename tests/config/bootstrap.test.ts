@@ -29,8 +29,6 @@ describe("ensureUraniborgAppHome", () => {
 
     expect(createdDirectories).toEqual([
       "/tmp/alice/.uraniborg",
-      "/tmp/alice/.uraniborg/vendor",
-      "/tmp/alice/.uraniborg/vendor/feynman",
       "/tmp/alice/.uraniborg/runs"
     ]);
     expect(status.isLayoutValid).toBe(true);
@@ -43,7 +41,7 @@ describe("inspectUraniborgAppHome", () => {
       ["/tmp/alice/.uraniborg", "directory"],
       ["/tmp/alice/.uraniborg/vendor", "directory"],
       ["/tmp/alice/.uraniborg/vendor/feynman", "missing"],
-      ["/tmp/alice/.uraniborg/runs", "directory"]
+      ["/tmp/alice/.uraniborg/runs", "missing"]
     ]);
     const filesystem: AppHomeFilesystem = {
       async mkdir(): Promise<void> {},
@@ -58,6 +56,6 @@ describe("inspectUraniborgAppHome", () => {
     const status = await inspectUraniborgAppHome(paths, filesystem);
 
     expect(status.isLayoutValid).toBe(false);
-    expect(status.feynmanRuntime.kind).toBe("missing");
+    expect(status.runs.kind).toBe("missing");
   });
 });

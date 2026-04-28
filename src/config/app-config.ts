@@ -18,8 +18,21 @@ const refineDefaultsSchema = z.object({
 
 const refineEndpointSchema = z.object({
   baseUrl: z.string().url(),
-  apiKeyEnvVar: z.string().trim().min(1),
-  timeoutMs: z.number().int().positive().default(60000)
+  timeoutMs: z.number().int().positive().default(60000),
+  apiKey: z.string().trim().min(1).optional(),
+  apiKeyEnvVar: z.string().trim().min(1).optional()
+}).superRefine((value, context) => {
+  if (
+    typeof value.apiKey !== "string" &&
+    typeof value.apiKeyEnvVar !== "string"
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["apiKey"],
+      message:
+        "Provide either a stored API key or an environment variable name for the API key."
+    });
+  }
 });
 
 const uraniborgConfigSchema = z.object({
@@ -55,14 +68,36 @@ export function resolveUraniborgConfigSecrets(
   config: UraniborgConfig,
   environment: NodeJS.ProcessEnv
 ): Result<ResolvedUraniborgConfig, UraniborgConfigLoadError> {
-  const apiKey = environment[config.refine.endpoint.apiKeyEnvVar];
+  const configuredApiKey = config.refine.endpoint.apiKey;
+
+  if (typeof configuredApiKey === "string" && configuredApiKey.length > 0) {
+    return ok({
+      ...config,
+      refine: {
+        ...config.refine,
+        endpoint: {
+          ...config.refine.endpoint,
+          apiKey: configuredApiKey
+        }
+      }
+    });
+  }
+
+  const apiKeyEnvVar = config.refine.endpoint.apiKeyEnvVar;
+  const apiKey =
+    typeof apiKeyEnvVar === "string" ? environment[apiKeyEnvVar] : undefined;
 
   if (typeof apiKey !== "string" || apiKey.length === 0) {
     return err({
       code: "secret_missing",
-      message: `Environment variable "${config.refine.endpoint.apiKeyEnvVar}" is not set.`,
+      message:
+        typeof apiKeyEnvVar === "string"
+          ? `Environment variable "${apiKeyEnvVar}" is not set.`
+          : "Revision API key is not configured.",
       details: [
-        "Set the configured API key environment variable before running refinement."
+        typeof apiKeyEnvVar === "string"
+          ? "Set the configured API key environment variable before running revision."
+          : "Run `uraniborg revision --setup` or `uraniborg init` to provide a revision API key."
       ]
     });
   }

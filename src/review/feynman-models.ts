@@ -1,33 +1,34 @@
 import {
-  runPinnedFeynmanCommand,
+  runFeynmanCommand,
   type FeynmanCommandExecution,
   type FeynmanCommandRunner
 } from "./feynman-bootstrap.js";
 
-export async function getPinnedFeynmanVersion(
+export type FeynmanSearchProvider =
+  | "auto"
+  | "perplexity"
+  | "exa"
+  | "gemini";
+
+export async function getFeynmanVersion(
   executablePath: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(executablePath, ["--version"], undefined, runner);
+  return runFeynmanCommand(executablePath, ["--version"], undefined, runner);
 }
 
-export async function listPinnedFeynmanModels(
+export async function listFeynmanModels(
   executablePath: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(
-    executablePath,
-    ["model", "list"],
-    undefined,
-    runner
-  );
+  return runFeynmanCommand(executablePath, ["model", "list"], undefined, runner);
 }
 
-export async function getPinnedFeynmanAlphaStatus(
+export async function getFeynmanAlphaStatus(
   executablePath: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(
+  return runFeynmanCommand(
     executablePath,
     ["alpha", "status"],
     undefined,
@@ -35,11 +36,11 @@ export async function getPinnedFeynmanAlphaStatus(
   );
 }
 
-export async function getPinnedFeynmanSearchStatus(
+export async function getFeynmanSearchStatus(
   executablePath: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(
+  return runFeynmanCommand(
     executablePath,
     ["search", "status"],
     undefined,
@@ -47,65 +48,86 @@ export async function getPinnedFeynmanSearchStatus(
   );
 }
 
-export async function runPinnedFeynmanSetup(
+export async function runFeynmanSetup(
   executablePath: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(
+  return runFeynmanCommand(
     executablePath,
-    getPinnedFeynmanSetupCommand(),
+    getFeynmanSetupCommand(),
     undefined,
     runner
   );
 }
 
-export async function runPinnedFeynmanModelLogin(
+export async function runFeynmanModelLogin(
   executablePath: string,
   provider: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(
+  return runFeynmanCommand(
     executablePath,
-    getPinnedFeynmanModelLoginCommand(provider),
+    getFeynmanModelLoginCommand(provider),
     undefined,
     runner
   );
 }
 
-export async function runPinnedFeynmanAlphaLogin(
+export async function runFeynmanAlphaLogin(
   executablePath: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(
+  return runFeynmanCommand(executablePath, ["alpha", "login"], undefined, runner);
+}
+
+export async function runFeynmanSearchSet(
+  executablePath: string,
+  provider: FeynmanSearchProvider,
+  apiKey?: string,
+  runner?: FeynmanCommandRunner
+): Promise<FeynmanCommandExecution> {
+  return runFeynmanCommand(
     executablePath,
-    ["alpha", "login"],
+    getFeynmanSearchSetCommand(provider, apiKey),
     undefined,
     runner
   );
 }
 
-export async function runPinnedFeynmanDoctor(
+export async function runFeynmanDoctor(
   executablePath: string,
   runner?: FeynmanCommandRunner
 ): Promise<FeynmanCommandExecution> {
-  return runPinnedFeynmanCommand(
+  return runFeynmanCommand(
     executablePath,
-    getPinnedFeynmanDoctor(),
+    getFeynmanDoctorCommand(),
     undefined,
     runner
   );
 }
 
-export function getPinnedFeynmanSetupCommand(): readonly string[] {
+export function getFeynmanSetupCommand(): readonly string[] {
   return ["setup"];
 }
 
-export function getPinnedFeynmanModelLoginCommand(
+export function getFeynmanModelLoginCommand(
   provider: string
 ): readonly string[] {
   return ["model", "login", provider];
 }
 
-export function getPinnedFeynmanDoctor(): readonly string[] {
+export function getFeynmanDoctorCommand(): readonly string[] {
   return ["doctor"];
+}
+
+export function getFeynmanSearchSetCommand(
+  provider: FeynmanSearchProvider,
+  apiKey?: string
+): readonly string[] {
+  return [
+    "search",
+    "set",
+    provider,
+    ...(typeof apiKey === "string" && apiKey.length > 0 ? [apiKey] : [])
+  ];
 }

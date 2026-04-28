@@ -4,11 +4,11 @@ import { runModelsCommand } from "../../src/cli/commands/models.js";
 import { ok } from "../../src/types/result.js";
 import type {
   FeynmanCommandExecution,
-  PinnedFeynmanRuntimeStatus
+  FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 
 describe("runModelsCommand", () => {
-  it("shows review model remediation guidance and configured refine defaults", async () => {
+  it("shows review model remediation guidance and configured revision defaults", async () => {
     const lines: string[] = [];
 
     await runModelsCommand({
@@ -39,7 +39,7 @@ describe("runModelsCommand", () => {
       async getAlphaStatus() {
         return createExecution({
           args: ["alpha", "status"],
-          stdout: "AlphaXiv ready"
+          stdout: "AlphaXiv not configured"
         });
       },
       async getSearchStatus() {
@@ -54,7 +54,22 @@ describe("runModelsCommand", () => {
           refine: {
             endpoint: {
               baseUrl: "https://api.example.com/v1",
-              apiKeyEnvVar: "OPENAI_API_KEY",
+              apiKey: "secret",
+              timeoutMs: 60000
+            },
+            defaults: {
+              model: "gpt-5",
+              temperature: 0.2
+            }
+          }
+        });
+      },
+      async loadParsedConfig() {
+        return ok({
+          version: 1,
+          refine: {
+            endpoint: {
+              baseUrl: "https://api.example.com/v1",
               timeoutMs: 60000
             },
             defaults: {
@@ -70,25 +85,37 @@ describe("runModelsCommand", () => {
     });
 
     expect(lines).toContain(
-      "[fail] Review model discovery is not ready through the pinned Feynman runtime."
+      "[fail] Review model discovery is not ready through the selected Feynman runtime."
     );
-    expect(lines).toContain("[ok] Default refine model: gpt-5");
+    expect(lines).toContain("[ok] Revision setup is ready.");
     expect(lines).toContain("Endpoint: https://api.example.com/v1");
-    expect(lines).toContain(
-      "[warn] Web search is not configured. Latest web research coverage may be weaker."
+    expect(lines).toContain("Default model: gpt-5");
+    expect(lines.some((line) => line.includes("Recommended Capabilities"))).toBe(
+      false
     );
+    expect(lines.some((line) => line.includes("AlphaXiv"))).toBe(false);
+    expect(lines.some((line) => line.includes("Web search"))).toBe(false);
+    expect(lines.some((line) => line.includes("Exit code:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stdout:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stderr:"))).toBe(false);
   });
 });
 
-function createReadyRuntimeStatus(): PinnedFeynmanRuntimeStatus {
+function createReadyRuntimeStatus(): FeynmanRuntimeStatus {
   return {
     ready: true,
     code: "ready",
-    manifestPath: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
     executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
-    expectedVersion: "1.2.3",
     detectedVersion: "1.2.3",
-    warnings: []
+    warnings: [],
+    candidates: [
+      {
+        executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+        compatible: true,
+        detectedVersion: "1.2.3",
+        details: ["Version: 1.2.3"]
+      }
+    ]
   };
 }
 

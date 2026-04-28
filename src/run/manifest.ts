@@ -86,7 +86,7 @@ export interface RunConfigSnapshot {
   };
   refineEndpoint: {
     baseUrl: string;
-    apiKeyEnvVar: string;
+    apiKeyConfigured: boolean;
     timeoutMs: number;
   };
 }
@@ -193,7 +193,7 @@ export function createRunConfigSnapshot(input: {
     },
     refineEndpoint: {
       baseUrl: input.config.refine.endpoint.baseUrl,
-      apiKeyEnvVar: input.config.refine.endpoint.apiKeyEnvVar,
+      apiKeyConfigured: input.config.refine.endpoint.apiKey.length > 0,
       timeoutMs: input.config.refine.endpoint.timeoutMs
     }
   };

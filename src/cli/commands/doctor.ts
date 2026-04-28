@@ -6,16 +6,17 @@ import {
   resolveUraniborgPaths
 } from "../../config/index.js";
 import {
-  classifyFeynmanReadiness,
-  getPinnedFeynmanAlphaStatus,
-  getPinnedFeynmanSearchStatus,
-  inspectPinnedFeynmanRuntime,
-  listPinnedFeynmanModels,
-  runPinnedFeynmanDoctor,
-  type FeynmanCommandExecution,
+  collectFeynmanRuntimeSnapshot,
+  createSearchConfigurationRemediationAction,
+  createNodeFeynmanCommandRunner,
+  createSerializedFeynmanCommandRunner,
+  getFeynmanAlphaStatus,
+  getFeynmanSearchStatus,
+  inspectFeynmanRuntime,
+  listFeynmanModels,
   type FeynmanCommandRunner,
   type FeynmanReadinessReport,
-  type PinnedFeynmanRuntimeStatus
+  type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import type { Result } from "../../types/result.js";
 import type {
@@ -41,11 +42,10 @@ export function registerDoctorCommand(program: Command): void {
 export interface DoctorCommandDependencies extends SharedRemediationDependencies {
   resolvePaths?: typeof resolveUraniborgPaths;
   ensureAppHome?: typeof ensureUraniborgAppHome;
-  inspectRuntime?: typeof inspectPinnedFeynmanRuntime;
-  listModels?: typeof listPinnedFeynmanModels;
-  getAlphaStatus?: typeof getPinnedFeynmanAlphaStatus;
-  getSearchStatus?: typeof getPinnedFeynmanSearchStatus;
-  getDoctorOutput?: typeof runPinnedFeynmanDoctor;
+  inspectRuntime?: typeof inspectFeynmanRuntime;
+  listModels?: typeof listFeynmanModels;
+  getAlphaStatus?: typeof getFeynmanAlphaStatus;
+  getSearchStatus?: typeof getFeynmanSearchStatus;
   loadConfig?: typeof loadUraniborgConfig;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
@@ -54,10 +54,9 @@ export interface DoctorCommandDependencies extends SharedRemediationDependencies
 
 interface DoctorReport {
   appHomeStatus: UraniborgAppHomeStatus;
-  runtimeStatus: PinnedFeynmanRuntimeStatus;
+  runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
   refineConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
-  feynmanDoctorExecution?: FeynmanCommandExecution | undefined;
 }
 
 export async function runDoctorCommand(
@@ -84,6 +83,30 @@ export async function runDoctorCommand(
       writeLine
     }
   });
+
+  const webSearchCheck = report.readinessReport.checks.find(
+    (check) => check.code === "web_search"
+  );
+
+  if (report.runtimeStatus.ready && webSearchCheck?.ready) {
+    await promptAndRunRemediations({
+      executablePath: report.runtimeStatus.executablePath,
+      actions: [
+        createSearchConfigurationRemediationAction(
+          "Manage web-search providers for fresher web research coverage.",
+          {
+            promptInitialValue: false
+          }
+        )
+      ],
+      dependencies: {
+        interactive: dependencies.interactive ?? isInteractiveTerminal(),
+        launcher: dependencies.launcher,
+        prompts: dependencies.prompts,
+        writeLine
+      }
+    });
+  }
 }
 
 export async function collectDoctorReport(
@@ -91,51 +114,29 @@ export async function collectDoctorReport(
 ): Promise<DoctorReport> {
   const resolvePaths = dependencies.resolvePaths ?? resolveUraniborgPaths;
   const ensureAppHome = dependencies.ensureAppHome ?? ensureUraniborgAppHome;
-  const inspectRuntime = dependencies.inspectRuntime ?? inspectPinnedFeynmanRuntime;
-  const listModels = dependencies.listModels ?? listPinnedFeynmanModels;
+  const inspectRuntime = dependencies.inspectRuntime ?? inspectFeynmanRuntime;
+  const listModels = dependencies.listModels ?? listFeynmanModels;
   const getAlphaStatus =
-    dependencies.getAlphaStatus ?? getPinnedFeynmanAlphaStatus;
+    dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
-    dependencies.getSearchStatus ?? getPinnedFeynmanSearchStatus;
-  const getDoctorOutput =
-    dependencies.getDoctorOutput ?? runPinnedFeynmanDoctor;
+    dependencies.getSearchStatus ?? getFeynmanSearchStatus;
   const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
+  const runner = createSerializedFeynmanCommandRunner(
+    dependencies.runner ?? createNodeFeynmanCommandRunner()
+  );
 
   const paths = resolvePaths();
   const appHomeStatus = await ensureAppHome(paths);
-  const runtimeStatus = await inspectRuntime(
-    paths,
-    dependencies.environment,
-    dependencies.runner
-  );
-
-  let readinessReport = classifyFeynmanReadiness({
-    runtimeStatus
+  const snapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime,
+    listModels,
+    getAlphaStatus,
+    getSearchStatus,
+    runner,
+    includeReviewModels: true,
+    includeCapabilities: true
   });
-  let feynmanDoctorExecution: FeynmanCommandExecution | undefined;
-
-  if (runtimeStatus.ready) {
-    const [modelListExecution, alphaStatusExecution, searchStatusExecution] =
-      await Promise.all([
-        listModels(runtimeStatus.executablePath, dependencies.runner),
-        getAlphaStatus(runtimeStatus.executablePath, dependencies.runner),
-        getSearchStatus(runtimeStatus.executablePath, dependencies.runner)
-      ]);
-
-    readinessReport = classifyFeynmanReadiness({
-      runtimeStatus,
-      modelListExecution,
-      alphaStatusExecution,
-      searchStatusExecution
-    });
-
-    if (readinessReport.checks.some((check) => !check.ready)) {
-      feynmanDoctorExecution = await getDoctorOutput(
-        runtimeStatus.executablePath,
-        dependencies.runner
-      );
-    }
-  }
 
   const refineConfigResult = await loadConfig(
     paths.configFile,
@@ -145,10 +146,9 @@ export async function collectDoctorReport(
 
   return {
     appHomeStatus,
-    runtimeStatus,
-    readinessReport,
-    refineConfigResult,
-    feynmanDoctorExecution
+    runtimeStatus: snapshot.runtimeStatus,
+    readinessReport: snapshot.readinessReport,
+    refineConfigResult
   };
 }
 
@@ -160,11 +160,9 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
       `App home layout is ready at ${report.appHomeStatus.paths.appHomeDirectory}.`,
       `App home layout is not valid at ${report.appHomeStatus.paths.appHomeDirectory}.`
     ),
-    `  vendor: ${report.appHomeStatus.vendor.kind} (${report.appHomeStatus.vendor.path})`,
-    `  runtime: ${report.appHomeStatus.feynmanRuntime.kind} (${report.appHomeStatus.feynmanRuntime.path})`,
     `  runs: ${report.appHomeStatus.runs.kind} (${report.appHomeStatus.runs.path})`,
     "",
-    "Feynman Readiness"
+    "Review Runtime"
   ];
 
   for (const check of report.readinessReport.checks) {
@@ -174,18 +172,18 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
       `${prefix} ${check.summary} [${check.tier}]`
     );
 
-    for (const detail of check.details) {
+    for (const detail of selectVisibleDoctorDetails(check.code, check.details)) {
       lines.push(`  ${detail}`);
     }
   }
 
-  lines.push("", "Refine Configuration");
+  lines.push("", "Revision Readiness");
 
   if (report.refineConfigResult.ok) {
     lines.push(
       formatStatusLine(
         true,
-        `Refine configuration is valid. Model: ${report.refineConfigResult.value.refine.defaults.model}. Endpoint: ${report.refineConfigResult.value.refine.endpoint.baseUrl}`,
+        `Revision setup is ready. Model: ${report.refineConfigResult.value.refine.defaults.model}. Endpoint: ${report.refineConfigResult.value.refine.endpoint.baseUrl}`,
         ""
       )
     );
@@ -199,17 +197,6 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
     }
   }
 
-  if (
-    report.feynmanDoctorExecution !== undefined &&
-    hasVisibleDoctorOutput(report.feynmanDoctorExecution)
-  ) {
-    lines.push("", "Feynman Diagnostics");
-
-    for (const detail of describeDoctorExecution(report.feynmanDoctorExecution)) {
-      lines.push(detail);
-    }
-  }
-
   lines.push("", "Summary");
 
   const blockingIssues =
@@ -220,12 +207,30 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
   if (blockingIssues) {
     lines.push("[fail] Uraniborg has blocking environment issues.");
   } else if (!report.readinessReport.recommendedReady) {
-    lines.push("[warn] Uraniborg can run, but recommended Feynman research capabilities are missing.");
+    lines.push("[warn] Uraniborg can run, but recommended research capabilities are missing.");
   } else {
     lines.push("[ok] Uraniborg environment is ready.");
   }
 
   return lines;
+}
+
+function selectVisibleDoctorDetails(
+  code: string,
+  details: readonly string[]
+): readonly string[] {
+  if (code === "runtime") {
+    return details.filter(
+      (detail) =>
+        detail.startsWith("Version:") || detail.startsWith("Multiple compatible")
+    );
+  }
+
+  if (code === "review_models") {
+    return details.filter((detail) => detail.startsWith("Models:"));
+  }
+
+  return [];
 }
 
 function formatStatusLine(
@@ -234,40 +239,6 @@ function formatStatusLine(
   failureMessage: string
 ): string {
   return ready ? `[ok] ${successMessage}` : `[fail] ${failureMessage}`;
-}
-
-function hasVisibleDoctorOutput(execution: FeynmanCommandExecution): boolean {
-  return (
-    execution.stdout.trim().length > 0 ||
-    execution.stderr.trim().length > 0 ||
-    execution.exitCode !== 0
-  );
-}
-
-function describeDoctorExecution(
-  execution: FeynmanCommandExecution
-): readonly string[] {
-  const lines = [`Exit code: ${execution.exitCode}`];
-  const stdout = execution.stdout.trim();
-  const stderr = execution.stderr.trim();
-
-  if (stdout.length > 0) {
-    lines.push("stdout:");
-
-    for (const line of stdout.split(/\r?\n/u)) {
-      lines.push(`  ${line}`);
-    }
-  }
-
-  if (stderr.length > 0) {
-    lines.push("stderr:");
-
-    for (const line of stderr.split(/\r?\n/u)) {
-      lines.push(`  ${line}`);
-    }
-  }
-
-  return lines;
 }
 
 function isInteractiveTerminal(): boolean {

@@ -1,911 +1,161 @@
 # Uraniborg v1 UAT Instructions
 
-This document is the practical execution guide for the broader plan in [uraniborg-v1-uat-plan.md](./uraniborg-v1-uat-plan.md).
+This is the practical execution guide for [uraniborg-v1-uat-plan.md](./uraniborg-v1-uat-plan.md).
 
-Use this when you want to actually run UAT, not just review the coverage matrix.
-
-## Current UAT Status
-
-- Current UAT status: blocked for first-run bootstrap success testing
-- Reason: the locked spec requires Uraniborg to provision a pinned Feynman runtime under `~/.uraniborg/vendor/feynman`, but the current implementation does not create `runtime.json` or the pinned executable from zero state
-- Practical effect: `doctor` can detect the missing runtime, but its remediation path tries to launch a binary that does not exist and fails with `ENOENT`
-- Tester guidance: this is a product blocker, not a setup mistake
-- Do not manually create `runtime.json` or copy binaries into place as part of normal UAT unless you are explicitly running an unsupported workaround experiment
-
-## If This Is Your First Node Package Test
-
-That is fine. You do not need to know Node packaging deeply to do the first UAT pass.
-
-For your first pass, you only need to understand three things:
-
-1. `npm install`
-   - installs the project dependencies
-2. `npm run build`
-   - compiles the TypeScript source into runnable JavaScript under `dist/`
-3. `node dist/src/cli/main.js ...`
-   - runs the built CLI directly
-
-You do not need to publish the package.
-You do not need to install it globally.
-You do not need to know how npm package distribution works to begin UAT.
-
-## What You Are Testing
-
-You are answering this question:
-
-“Can a real user clone this repo, build it, configure it, run it, inspect artifacts, and recover from failures in a predictable way?”
-
-That is the purpose of UAT here.
-
-## Before You Spend More Time
-
-- If you are testing from a fresh setup, run `doctor` first.
-- If `doctor` reports missing `runtime.json` or missing `~/.uraniborg/vendor/feynman/bin/feynman`, you have hit the current first-run blocker.
-- If remediation then fails with `ENOENT`, stop the run-oriented UAT path.
-- This means Uraniborg is not yet able to bootstrap itself as the spec intended.
-- This is not because you skipped a hidden manual installation step.
-
-## Mental Model
-
-There are two separate ideas:
-
-### 1. Environment
-
-This means the kind of machine or home-directory state you are testing in.
-
-In plain English, this means:
-
-- what kind of machine or shell you are using
-- whether Uraniborg has been used there before
-- whether the Uraniborg-managed files under `~/.uraniborg/` are clean, healthy, or broken
-- whether you can safely interrupt a running command with `Ctrl+C`
-
-Think of an environment as the overall testing setup.
-
-Examples:
-
-- a new laptop account that has never used Uraniborg
-- your normal machine where Uraniborg has already been run before
-- a machine where Uraniborg files exist but are intentionally broken for testing
-- a terminal session where you can start a run and interrupt it
-
-### Concrete definitions
-
-`fresh home`
-
-- this means a home directory where Uraniborg has not been set up yet
-- usually this means one of these:
-  - `~/.uraniborg/` does not exist at all
-  - `~/.uraniborg/` exists but you intentionally remove it before testing
-  - you use a separate test account or temporary home directory that has never run Uraniborg
-
-Fresh home does not mean you need a brand new computer.
-It only means Uraniborg is starting without a working `~/.uraniborg` state.
-
-`already configured home`
-
-- this means `~/.uraniborg/` already exists and contains a plausible working setup
-- for example:
-  - a `config.json` written by `uraniborg init`
-  - one or more prior run folders under `~/.uraniborg/runs/`
-  - a healthy pinned runtime under `~/.uraniborg/vendor/feynman`
-
-`broken runtime or config environment`
-
-- this means the environment is intentionally prepared so something Uraniborg depends on is wrong
-- for example:
-  - missing `config.json`
-  - invalid JSON in `config.json`
-  - missing pinned runtime manifest
-  - pinned runtime exists but its executable is not runnable
-  - pinned runtime version is different from what Uraniborg expects
-
-`interruptible terminal`
-
-- this means a normal terminal where you can start a command and then interrupt it with `Ctrl+C`
-- you use this to test whether Uraniborg records `cancelled` state and resumes correctly
-
-### What "bootstrap testing" means
-
-`bootstrap testing` means:
-
-- testing the very beginning of the user journey
-- testing what happens when Uraniborg is run before it is fully set up
-- checking whether Uraniborg creates or validates the files and directories it needs under `~/.uraniborg/`
-
-In practice, bootstrap testing usually means:
-
-1. start in a `fresh home`
-2. run `doctor` and `init`
-3. observe what Uraniborg creates
-4. confirm it explains missing pieces clearly instead of failing mysteriously
-
-Bootstrap testing is not the same thing as a full successful run.
-It is the “can this product prepare itself and explain its prerequisites?” phase.
-
-### What “Bootstrap Testing” Means Right Now
-
-- Bootstrap testing asks whether Uraniborg can prepare itself enough for a first real use.
-- For the locked spec, that includes preparing the pinned Feynman runtime.
-- In the current implementation, bootstrap testing currently ends in a blocker instead of a successful setup.
-- So for now, bootstrap UAT is a failure-capture exercise, not a success-confirmation exercise.
-
-### 2. Runtime Artifact State
-
-This means what Uraniborg has created under `~/.uraniborg/`.
-
-The most important example is:
-
-- the pinned Feynman runtime under `~/.uraniborg/vendor/feynman`
-
-In plain English, this means:
-
-- the state of the files Uraniborg owns or relies on inside your home directory
-- especially the ones that change over time as Uraniborg is initialized, run, interrupted, resumed, or broken on purpose for testing
-
-You can think of runtime artifact state as:
-
-- the state of Uraniborg’s local installation and run data
-- not the whole machine, just Uraniborg’s files
-
-Examples of Uraniborg-managed or Uraniborg-relevant runtime artifacts:
-
-- `~/.uraniborg/config.json`
-- `~/.uraniborg/vendor/feynman/`
-- `~/.uraniborg/runs/`
-- each run directory and its `run.json`
-
-Important:
-
-- the pinned runtime is not a separate environment type
-- it is a thing whose state changes inside an environment
-
-That distinction matters:
-
-- `environment` answers: “What kind of machine/home-directory situation am I testing in?”
-- `runtime artifact state` answers: “What is the condition of Uraniborg’s files inside that environment?”
-
-Example:
-
-- you can have a `fresh home` environment where the pinned runtime is missing
-- you can also have a `broken runtime` environment where the home is not fresh, but the pinned runtime exists in a bad state
-
-### Concrete runtime states
-
-`runtime missing`
-
-- Uraniborg has not yet created the pinned runtime, or required files are absent
-- example:
-  - `~/.uraniborg/vendor/feynman/` does not exist
-  - or it exists but the manifest is missing
-
-`runtime healthy`
-
-- the pinned runtime exists and is usable
-- example:
-  - manifest exists
-  - executable exists
-  - executable runs
-  - version matches what Uraniborg expects
-
-`runtime broken`
-
-- the pinned runtime exists, but something about it is wrong
-- example:
-  - manifest exists but is invalid
-  - executable path is wrong
-  - executable is not runnable
-  - version mismatches
-  - provider access is not set up for successful review-side work
-
-Use this rule:
-
-- in bootstrap testing, it may start missing
-- in successful run testing, it should already work
-- in broken-runtime testing, it should exist but be broken
-
-### Simple examples
-
-Example 1: first-time setup
-
-- environment: fresh home
-- runtime artifact state: missing
-- what you test:
-  - does `doctor` create `~/.uraniborg/`?
-  - does Uraniborg explain what is still missing?
-
-Example 2: normal successful run
-
-- environment: already configured home
-- runtime artifact state: healthy
-- what you test:
-  - can `run` complete successfully?
-  - are artifacts and history written correctly?
-
-Example 3: broken runtime handling
-
-- environment: broken runtime/config environment
-- runtime artifact state: broken
-- what you test:
-  - does Uraniborg fail clearly?
-  - does it avoid silent fallback?
-  - does it offer appropriate remediation guidance?
-
-Example 4: interruption and resume
-
-- environment: interruptible terminal
-- runtime artifact state: healthy
-- what you test:
-  - does `Ctrl+C` mark the run as cancelled?
-  - does `resume` restart from the correct state?
-
-## Before You Start
-
-You need:
+## Preconditions
 
 - Node.js `>= 20`
-- npm dependencies installed
-- a way to test with the pinned Feynman runtime under `~/.uraniborg/vendor/feynman`
-- working review-side access in that pinned runtime for successful run tests
-- a refine endpoint and API key you can configure via `uraniborg init`
+- dependencies installed with `npm install`
+- project built with `npm run build`
+- a compatible `feynman` executable on `PATH`
+- a real refine endpoint, API key, and model for `uraniborg init`
 
-Clarification:
-
-- You do not need the pinned runtime to already exist before every UAT case.
-- For first-time bootstrap testing, you are checking whether Uraniborg creates or repairs the needed app-home state.
-- But for a real successful `run` or `resume` test, you do need one environment where the pinned runtime is healthy enough to execute review-side work.
-
-## Current Beginner Decision Tree
-
-- Step 1: run build and help
-- Step 2: run `doctor`
-- If `doctor` fails on the pinned runtime and remediation fails with `ENOENT`:
-  - record `UAT-001` evidence
-  - do not continue to `run` or `resume` cases
-  - continue only with `init` UX review, empty-history checks, and documentation feedback
-- If `doctor` reaches a healthy runtime state in a future build, then continue to `init`, `models`, `run`, `history`, and `resume`
-
-## Important Current UAT Blocker
-
-There is a current product gap you should know before spending more time on run-side UAT.
-
-What the locked spec expected:
-
-- Uraniborg should provision its own pinned Feynman runtime under `~/.uraniborg/vendor/feynman`
-- on first run, if that runtime is missing, Uraniborg should prepare it before trying to use it
-
-What the current implementation does:
-
-- it creates the runtime directory
-- it checks whether `runtime.json` and the pinned executable already exist
-- if they are missing, `doctor` offers remediation
-- but the remediation tries to launch the pinned executable path before that executable has ever been created
-
-Why this matters:
-
-- first-run bootstrap UAT is currently blocked at the review-runtime setup stage
-- you can still test onboarding copy, prompt quality, packaging, and other non-runtime issues
-- but you cannot complete a truthful first-run end-to-end `run` unless the runtime issue is addressed first or you intentionally test a workaround
-
-Very important:
-
-- this is not just user confusion
-- it is a real gap between the locked spec and the current implementation
-- see [uraniborg-v1-uat-bug-inventory.md](./uraniborg-v1-uat-bug-inventory.md), especially `UAT-001`, `UAT-006`, and `UAT-007`
-
-## Existing Feynman Installations
-
-You may already have Feynman installed somewhere else on your machine, for example:
-
-- `~/.local/bin/feynman`
-
-That is different from Uraniborg's pinned runtime path:
-
-- `~/.uraniborg/vendor/feynman/bin/feynman`
-
-Right now, Uraniborg only accepts the pinned-runtime path for review-side readiness.
-
-So today:
-
-- having a healthy existing Feynman installation elsewhere does not automatically unblock Uraniborg
-- Uraniborg does not currently import that install into the pinned runtime directory
-- Uraniborg also does not currently fall back to using that install directly
-
-For UAT purposes, treat this carefully:
-
-- if you are validating the product against the locked spec, do not assume an existing global or local Feynman install is enough
-- if you test a manual workaround using an existing install, record it as a workaround case, not as a successful spec-compliant first-run journey
-
-Product-design note:
-
-- using an existing installation to seed the pinned runtime would preserve the current spec direction
-- using an existing installation directly instead of a pinned runtime would be a spec change
-
-## Important Current Blocker Before Continuing UAT
-
-The current implementation has a core first-run gap.
-
-Today, Uraniborg does all of these:
-
-- creates the `~/.uraniborg/` directory layout
-- writes Uraniborg-owned refine config through `init`
-- checks whether a pinned Feynman manifest and executable already exist
-
-Today, Uraniborg does **not** do these:
-
-- provision the initial pinned Feynman runtime from zero state
-- write the first `~/.uraniborg/vendor/feynman/runtime.json`
-- place the first pinned `bin/feynman` executable into that directory
-- reuse an already-installed healthy Feynman binary on the machine when the pinned runtime is absent
-
-What that means in practice:
-
-- if you start from a true first-run setup, `doctor` can create the folders but still fail on missing pinned-runtime files
-- `init` can complete, but that only sets up refinement-side config
-- you may still be blocked from reaching a successful `run`
-
-Important:
-
-- this is a product issue found by UAT
-- it is not a sign that you personally missed a setup step
-- it is not just missing documentation
-
-If your machine already has Feynman installed somewhere else, for example:
-
-- `/Users/shahmahdihasan/.local/bin/feynman`
-
-the current Uraniborg implementation still does not automatically adopt or reuse it.
-
-So if you feel blocked at this point, that is a valid UAT outcome.
-
-## What `init` Does And Does Not Do
-
-This is an important distinction during UAT.
-
-`node dist/src/cli/main.js init` currently does:
-
-- create or update `~/.uraniborg/config.json`
-- collect Uraniborg-owned refinement settings such as endpoint, model defaults, and related values
-
-`init` currently does **not**:
-
-- install Feynman
-- copy a Feynman binary into `~/.uraniborg/vendor/feynman`
-- create `~/.uraniborg/vendor/feynman/runtime.json`
-- make the Feynman readiness check pass by itself
-
-So if you run `init` and then `doctor`, it is currently expected that:
-
-- refine-config errors may improve
-- Feynman readiness errors may still remain
-
-That split is confusing from a first-time user perspective, and it is now a recorded UAT issue.
-
-## Important Current Invocation Detail
-
-For local UAT, use the built CLI entrypoint directly:
+Use the built CLI directly:
 
 ```bash
-node dist/src/cli/main.js
+node dist/src/cli/main.js <command>
 ```
 
-Do not rely on `uraniborg` being installed globally yet.
+## Quick UAT Flow
 
-Do not rely on the `package.json` `bin` path yet, because it currently points at `dist/cli/main.js` while the build emits `dist/src/cli/main.js`.
+1. Start from a fresh home directory or clean `~/.uraniborg/`.
+2. Run `doctor`.
+3. Run `init`.
+4. Run `models`.
+5. Run `run <draft.md> --iterations 1`.
+6. Inspect artifacts under `~/.uraniborg/runs/`.
+7. Run `history`.
+8. If possible, interrupt a longer run and validate `resume`.
 
-That mismatch is a product packaging issue.
-
-For UAT right now, the safe command is:
-
-```bash
-node dist/src/cli/main.js ...
-```
-
-## What You Should Not Assume
-
-- Do not assume `npm install` or `npm run build` pins Feynman.
-- Do not assume `init` provisions the review runtime.
-- Do not assume `doctor` can currently install the pinned runtime from zero state.
-- Do not assume an existing global or local Feynman install will currently be reused.
-
-## What To Conclude If You Hit The Pinned-Runtime Block
-
-If `doctor` reports that the pinned Feynman runtime manifest or executable is missing, do not assume you made a beginner mistake.
-
-The correct interpretation is:
-
-- Uraniborg has completed app-home bootstrap
-- Uraniborg has **not** completed runtime provisioning
-- first-run review-side UAT is currently blocked by a product gap
-
-At that point, the right UAT action is:
-
-1. record the finding in the bug inventory
-2. stop treating the failure as a personal setup problem
-3. only continue deeper run/resume UAT if a later product fix or an explicitly approved temporary workaround is provided
-
-## Build And Validation
-
-From the repo root:
+## Step 1: Validate Build
 
 ```bash
-npm install
 npm run validate
-npm run build
-node dist/src/cli/main.js --help
 ```
 
-Expected result:
+Record:
 
-- typecheck passes
-- tests pass
-- help output shows:
-  - `init`
-  - `doctor`
-  - `models`
-  - `run`
-  - `resume`
-  - `history`
+- whether the full validation gate passes
+- the exact command output if it fails
 
-If any of this fails, stop there and note the failure.
-Do not continue into deeper UAT until the CLI can at least build and show help.
-
-## Your First UAT Pass
-
-If you want the shortest useful path, do only these steps first:
-
-1. build and validate
-2. run `doctor`
-3. run `init`
-4. run `models`
-5. run one successful `run`
-6. run `history`
-
-Only after that should you try interruption, resume, and broken-state cases.
-
-## Suggested Test Environments
-
-Map your actual machines or shell setups to these:
-
-- `ENV-A`
-  - fresh `HOME` or fresh `~/.uraniborg/`
-- `ENV-B`
-  - existing valid `~/.uraniborg/` with prior successful runs
-- `ENV-C`
-  - broken runtime or broken config state
-- `ENV-D`
-  - environment where you can interrupt a run with `Ctrl+C`
-
-## Suggested Runtime Artifact States
-
-This is separate from the environment list above.
-
-- `RT-1`
-  - pinned runtime missing
-  - typical for first-time bootstrap
-- `RT-2`
-  - pinned runtime present and healthy
-  - needed for real successful run testing
-- `RT-3`
-  - pinned runtime present but broken or mismatched
-  - used for failure and remediation testing
-
-Simple mapping:
-
-- `ENV-A` usually starts in `RT-1`
-- `ENV-B` should usually be `RT-2`
-- `ENV-C` is usually `RT-3`
-- `ENV-D` should usually be `RT-2`
-
-## If You Already Have Feynman Installed Elsewhere
-
-- Current implementation still checks only the pinned runtime location under `~/.uraniborg/vendor/feynman`.
-- A working installation elsewhere, including on `PATH`, does not currently unblock the product.
-- That behavior matches the pinned-runtime design, but it is poor user journey in practice.
-- Record this as product feedback, not as a tester mistake.
-- Do not treat manual copying from an existing install as the normal UAT path.
-
-## Suggested Fixtures
-
-Create these files somewhere outside the repo or in a temporary working directory.
-
-Minimal draft:
-
-```markdown
-# Idea
-
-We want to evaluate whether structured review plus memory-aware refinement produces more stable draft improvements than naive iterative rewriting.
-
-## Claim
-
-The loop may reduce oscillation by preserving explicit regression guards.
-
-## Open Questions
-
-- How should progress be measured?
-- What would count as a regression?
-```
-
-Non-Markdown invalid fixture:
-
-```text
-This is not markdown.
-```
-
-Medium draft:
-
-- use a real 2-4 page Markdown draft if available
-- otherwise expand the minimal draft with:
-  - abstract
-  - method sketch
-  - evaluation risks
-  - limitations
-
-If you are new to this, start with just:
-
-- one minimal Markdown fixture
-- one invalid `.txt` file
-
-That is enough for the first pass.
-
-## Evidence Capture Template
-
-For each UAT case, record:
-
-- case id
-- environment id
-- command run
-- terminal output
-- run id if one was created
-- relevant artifact paths
-- pass/fail
-- notes
-
-At minimum, preserve:
-
-- `run.json`
-- `review.log`
-- `refine.log`
-- `information-highway.md`
-- any failure output shown in the terminal
-
-If you want a simple method, create a text file called `uat-notes.txt` and append entries like:
-
-```text
-UJ-01
-Command: node dist/src/cli/main.js doctor
-Pass/Fail: pass
-What happened: created ~/.uraniborg and reported refine config missing
-```
-
-## Phase 1: First-Run Hygiene
-
-### 1. Check bootstrap and readiness
-
-In `ENV-A`:
+## Step 2: Check Environment Readiness
 
 ```bash
 node dist/src/cli/main.js doctor
 ```
 
-Verify:
+Pass if:
 
-- `~/.uraniborg/` is created if missing
-- the command checks pinned runtime readiness
-- refine configuration failures are explicit
-- recommended capability gaps are warnings, not fake blockers
+- app-home layout is created
+- Uraniborg reports a compatible discovered Feynman runtime, or clearly explains why none is usable
+- Uraniborg reports refinement readiness truthfully
+- recommended research gaps are warnings, not blockers
 
-If the pinned runtime does not yet exist, that is acceptable in this phase.
-What matters is whether Uraniborg handles the situation clearly and safely.
+Fail if:
 
-### 2. Configure Uraniborg-owned refine settings
+- Uraniborg still requires `~/.uraniborg/vendor/feynman`
+- Uraniborg tries to launch a nonexistent vendored binary
+- refinement is reported ready when API key, base URL, or model is not actually usable
+
+## Step 3: Run Minimal Init
 
 ```bash
 node dist/src/cli/main.js init
 ```
 
-Verify:
+Expected basic prompts:
 
-- it asks only for Uraniborg-owned refine configuration
-- it writes `~/.uraniborg/config.json`
-- it does not claim to manage Feynman internals directly
+- OpenAI-compatible refine endpoint URL
+- Refine API key
+- Default refinement model
 
-### 3. Inspect available models
+Fail if the default path asks for:
+
+- environment variable name
+- timeout
+- temperature
+- max output tokens
+
+After completion, inspect `~/.uraniborg/config.json` and confirm the saved config is consistent with the answers you provided.
+
+## Step 4: Check Model Visibility
 
 ```bash
 node dist/src/cli/main.js models
 ```
 
-Verify:
+Pass if:
 
-- review model discovery is shown clearly
-- refine default model and endpoint are shown
-- if review-side access is missing, remediation guidance is explicit
+- Uraniborg reports the selected Feynman runtime path/version when review runtime is ready
+- available review models are shown truthfully
+- refinement readiness shows base URL and default model when ready
+- incomplete refinement setup is reported as incomplete rather than as ready
 
-If this step fails because the pinned runtime is not yet healthy, record that and decide whether you are still in bootstrap testing or whether you need a healthy environment for the next steps.
-
-## Phase 2: First Successful Run
-
-### 4. Run one iteration
+## Step 5: Execute a Real Run
 
 ```bash
-node dist/src/cli/main.js run /absolute/path/to/fixture-idea-minimal.md --iterations 1
+node dist/src/cli/main.js run path/to/draft.md --iterations 1
 ```
 
-If more than one review model is available, also pass:
+Pass if:
 
-```bash
---review-model <model>
-```
-
-If needed, also pass:
-
-```bash
---refine-model <model>
-```
-
-Verify:
-
-- a new run directory is created under `~/.uraniborg/runs/`
-- the run finishes or fails clearly
-- if successful, artifacts include:
+- preflight blocks only on required failures
+- recommended AlphaXiv/web-search gaps are warnings
+- a successful run writes:
   - `run.json`
   - `config.snapshot.json`
   - `original.md`
   - `current.md`
   - `final.md`
   - `information-highway.md`
-  - `iter-1/input.md`
-  - `iter-1/review.md`
-  - `iter-1/refined.md`
-  - `iter-1/changes.md`
-  - `iter-1/review.log`
-  - `iter-1/refine.log`
+  - iteration artifacts and logs
 
-Important:
+Fail if:
 
-- This phase assumes you have an environment where the pinned runtime is actually healthy enough to run review-side work.
-- If you do not, this phase is expected to fail and should be treated as “environment not yet ready for successful-run UAT,” not automatically as a product bug.
+- run starts without a compatible review runtime
+- run starts without runnable refinement setup
+- recommended-only gaps become blocking
 
-### 5. Inspect artifact hygiene
-
-Check the created run directory manually.
-
-Verify:
-
-- `run.json` status matches terminal output
-- `information-highway.md` contains one structured iteration block
-- `iter-1/input.md` is the review-side input
-- the review phase did not consume memory
-- the refine phase used memory, review, and current draft
-
-If this is your first ever pass, stop here after a successful result and record what happened.
-That already gives you a meaningful first UAT checkpoint.
-
-## Phase 3: History And Repeatability
-
-### 6. Check history
+## Step 6: Inspect History
 
 ```bash
 node dist/src/cli/main.js history
 ```
 
-Verify:
+Pass if:
 
-- the new run appears
-- the state shown matches `run.json`
-- timestamps and run ids are readable
+- no-run state is clear before first run
+- completed runs show expected identifiers, timestamps, status, and iteration counts afterward
 
-### 7. Run a second draft
+## Step 7: Interrupt And Resume
 
-In `ENV-B`, repeat the run with another Markdown file.
-
-Verify:
-
-- prior runs remain untouched
-- app-home reuse is clean
-- no old artifacts are deleted
-
-## Phase 4: Cancellation And Resume
-
-### 8. Interrupt a run
-
-Start a run with a larger draft or multiple iterations:
-
-```bash
-node dist/src/cli/main.js run /absolute/path/to/fixture-draft-medium.md --iterations 2
-```
-
-Interrupt it during:
-
-- review
-- refine
-- memory update
-
-Run separate attempts if needed.
-
-Verify after each interruption:
-
-- run state becomes `cancelled`
-- partial artifacts and logs remain on disk
-- the terminal gives resume guidance
-
-### 9. Resume the interrupted run
+Use a multi-iteration run or a slower provider-backed run, then interrupt with `Ctrl+C`.
 
 ```bash
 node dist/src/cli/main.js resume <run-id>
 ```
 
-Verify:
+Pass if:
 
-- `review_running` resumes by rerunning review
-- `refine_running` resumes by rerunning refine
-- `memory_update` resumes by rebuilding from existing iteration artifacts
-- `finished` runs are rejected explicitly
+- the interrupted run is marked `cancelled`
+- `resume` restarts from the correct persisted state
+- no completed artifacts are lost or overwritten incorrectly
 
-If interruption testing feels too advanced for your first pass, skip it until you already have one successful run captured.
+## Failure Capture Template
 
-## Phase 5: Edge Cases
-
-### 10. Invalid input file
-
-```bash
-node dist/src/cli/main.js run /absolute/path/to/fixture-non-markdown.txt
+```text
+Case:
+Environment:
+Runtime state:
+Command:
+Observed:
+Expected:
+Artifacts:
+Next action:
 ```
 
-Verify:
+## Important Notes
 
-- it rejects the input before creating run artifacts
-
-### 11. Missing refine env var
-
-- configure `init` to use an env var you have not exported
-- then run:
-
-```bash
-node dist/src/cli/main.js doctor
-node dist/src/cli/main.js run /absolute/path/to/fixture-idea-minimal.md --iterations 1
-```
-
-Verify:
-
-- failure is explicit
-- no silent fallback occurs
-
-### 12. Broken runtime
-
-In `ENV-C`, simulate:
-
-- missing runtime manifest
-- non-runnable pinned executable
-- version mismatch
-
-Then run:
-
-```bash
-node dist/src/cli/main.js doctor
-node dist/src/cli/main.js models
-node dist/src/cli/main.js run /absolute/path/to/fixture-idea-minimal.md --iterations 1
-```
-
-Verify:
-
-- required review readiness blocks execution
-- remediation guidance is relevant
-- no `PATH` fallback is silently used
-
-### 13. Empty history
-
-In a fresh environment with no runs:
-
-```bash
-node dist/src/cli/main.js history
-```
-
-Verify:
-
-- it prints an explicit no-runs message
-- it does not crash
-
-## UAT Execution Order
-
-Use this order:
-
-1. `doctor`
-2. `init`
-3. `models`
-4. one successful `run`
-5. `history`
-6. interrupted `run`
-7. `resume`
-8. invalid input and broken-config cases
-9. broken-runtime cases
-
-Then map your observations back into:
-
-- [uraniborg-v1-uat-plan.md](./uraniborg-v1-uat-plan.md)
-
-## What You Can Still Test Today
-
-- `doctor` failure wording
-- `init` prompt clarity and user expectations
-- whether `init` creates a false sense of completion
-- `history` empty state
-- help output
-- docs and quickstart usability
-- packaging/bin-path mismatch
-
-## What You Cannot Meaningfully Test Today
-
-- a real successful run
-- real model selection based on a healthy pinned runtime
-- real review artifacts
-- real interruption and resume
-- real history summaries based on completed runs
-
-## Simplest Possible Beginner Flow
-
-If you want the least overwhelming version, do exactly this:
-
-```bash
-npm install
-npm run validate
-npm run build
-node dist/src/cli/main.js --help
-node dist/src/cli/main.js doctor
-node dist/src/cli/main.js init
-node dist/src/cli/main.js models
-node dist/src/cli/main.js run /absolute/path/to/fixture-idea-minimal.md --iterations 1
-node dist/src/cli/main.js history
-```
-
-If all of that works in a real environment, you already have a strong first UAT pass.
-
-## How To Judge Results
-
-Treat these as immediate defects:
-
-- silent fallback to the wrong runtime
-- lost run artifacts
-- incorrect resume behavior
-- run marked `finished` with missing artifacts
-- review/refine boundary violations
-- misleading messages that tell the user the wrong next step
-
-Treat these as product gaps but not necessarily blockers:
-
-- awkward wording
-- rough prompts
-- inconvenient manual steps that are explicit and safe
-
-## If You Want A Minimal First Pass
-
-If you do not want to run the full matrix yet, do only this:
-
-```bash
-npm run validate
-npm run build
-node dist/src/cli/main.js doctor
-node dist/src/cli/main.js init
-node dist/src/cli/main.js models
-node dist/src/cli/main.js run /absolute/path/to/fixture-idea-minimal.md --iterations 1
-node dist/src/cli/main.js history
-```
-
-That will tell you very quickly whether the product is merely test-complete or actually usable in a real environment.
-
-## When To Call Something A Product Bug
-
-Treat it as a likely product bug if:
-
-- the CLI builds but the commands behave inconsistently
-- Uraniborg silently uses the wrong runtime
-- a run says it succeeded but artifacts are missing
-- resume skips work it should have rerun
-- warnings and blockers are mixed up in a misleading way
-
-Treat it as an environment/setup issue first if:
-
-- your refine API key is missing
-- the real pinned runtime is not installed yet
-- provider access is not configured in the review runtime
+- Do not work around missing readiness by copying binaries into `~/.uraniborg/vendor/feynman`.
+- Do not treat a globally available but incompatible `feynman` as a pass.
+- Do record the exact selected runtime path Uraniborg reports when multiple `feynman` installations exist on `PATH`.

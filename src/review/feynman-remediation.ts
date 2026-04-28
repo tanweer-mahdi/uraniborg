@@ -2,22 +2,29 @@ import { spawn } from "node:child_process";
 
 import type { FeynmanCommandRunner } from "./feynman-bootstrap.js";
 import {
-  getPinnedFeynmanModelLoginCommand,
-  getPinnedFeynmanSetupCommand,
-  runPinnedFeynmanAlphaLogin,
-  runPinnedFeynmanModelLogin,
-  runPinnedFeynmanSetup
+  getFeynmanSearchSetCommand,
+  getFeynmanModelLoginCommand,
+  getFeynmanSetupCommand,
+  runFeynmanAlphaLogin,
+  runFeynmanModelLogin,
+  runFeynmanSearchSet,
+  runFeynmanSetup
 } from "./feynman-models.js";
+import type { FeynmanSearchProvider } from "./feynman-models.js";
 
 export type FeynmanRemediationKind =
+  | "install_or_expose_runtime"
   | "setup"
   | "model_login"
-  | "alpha_login";
+  | "alpha_login"
+  | "search_configure";
 
 export interface FeynmanRemediationAction {
   kind: FeynmanRemediationKind;
   reason: string;
   provider?: string | undefined;
+  apiKey?: string | undefined;
+  promptInitialValue?: boolean | undefined;
 }
 
 export interface FeynmanInteractiveLauncher {
@@ -25,6 +32,15 @@ export interface FeynmanInteractiveLauncher {
     executablePath: string,
     args: readonly string[]
   ) => Promise<{ exitCode: number }>;
+}
+
+export function createRuntimeInstallRemediationAction(
+  reason: string
+): FeynmanRemediationAction {
+  return {
+    kind: "install_or_expose_runtime",
+    reason
+  };
 }
 
 export function createSetupRemediationAction(
@@ -56,16 +72,42 @@ export function createAlphaLoginRemediationAction(
   };
 }
 
+export function createSearchConfigurationRemediationAction(
+  reason: string,
+  options: {
+    provider?: FeynmanSearchProvider | undefined;
+    apiKey?: string | undefined;
+    promptInitialValue?: boolean | undefined;
+  } = {}
+): FeynmanRemediationAction {
+  return {
+    kind: "search_configure",
+    reason,
+    ...(typeof options.provider === "string"
+      ? { provider: options.provider }
+      : {}),
+    ...(typeof options.apiKey === "string" ? { apiKey: options.apiKey } : {}),
+    ...(typeof options.promptInitialValue === "boolean"
+      ? { promptInitialValue: options.promptInitialValue }
+      : {})
+  };
+}
+
 export function getFeynmanRemediationCommand(
   action: FeynmanRemediationAction
 ): readonly string[] {
   switch (action.kind) {
+    case "install_or_expose_runtime":
     case "setup":
-      return getPinnedFeynmanSetupCommand();
+      return getFeynmanSetupCommand();
     case "model_login":
-      return getPinnedFeynmanModelLoginCommand(action.provider ?? "");
+      return getFeynmanModelLoginCommand(action.provider ?? "");
     case "alpha_login":
       return ["alpha", "login"];
+    case "search_configure":
+      return isFeynmanSearchProvider(action.provider)
+        ? getFeynmanSearchSetCommand(action.provider, action.apiKey)
+        : ["search", "set", "<provider>", "[api-key]"];
   }
 }
 
@@ -102,6 +144,12 @@ export async function launchFeynmanRemediationAction(
   action: FeynmanRemediationAction,
   launcher: FeynmanInteractiveLauncher = createNodeFeynmanInteractiveLauncher()
 ): Promise<{ exitCode: number }> {
+  if (action.kind === "search_configure" && !isFeynmanSearchProvider(action.provider)) {
+    throw new Error(
+      "Web-search remediation requires a provider before launch."
+    );
+  }
+
   return launcher.launch(executablePath, getFeynmanRemediationCommand(action));
 }
 
@@ -111,11 +159,36 @@ export async function runCapturedFeynmanRemediationAction(
   runner: FeynmanCommandRunner
 ) {
   switch (action.kind) {
+    case "install_or_expose_runtime":
     case "setup":
-      return runPinnedFeynmanSetup(executablePath, runner);
+      return runFeynmanSetup(executablePath, runner);
     case "model_login":
-      return runPinnedFeynmanModelLogin(executablePath, action.provider ?? "", runner);
+      return runFeynmanModelLogin(executablePath, action.provider ?? "", runner);
     case "alpha_login":
-      return runPinnedFeynmanAlphaLogin(executablePath, runner);
+      return runFeynmanAlphaLogin(executablePath, runner);
+    case "search_configure":
+      if (!isFeynmanSearchProvider(action.provider)) {
+        throw new Error(
+          "Web-search remediation requires a provider before execution."
+        );
+      }
+
+      return runFeynmanSearchSet(
+        executablePath,
+        action.provider,
+        action.apiKey,
+        runner
+      );
   }
+}
+
+function isFeynmanSearchProvider(
+  value: string | undefined
+): value is FeynmanSearchProvider {
+  return (
+    value === "auto" ||
+    value === "perplexity" ||
+    value === "exa" ||
+    value === "gemini"
+  );
 }

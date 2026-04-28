@@ -4,7 +4,7 @@ import { runDoctorCommand } from "../../src/cli/commands/doctor.js";
 import { ok } from "../../src/types/result.js";
 import type {
   FeynmanCommandExecution,
-  PinnedFeynmanRuntimeStatus
+  FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
 
@@ -50,12 +50,6 @@ describe("runDoctorCommand", () => {
           stdout: "Web search ready"
         });
       },
-      async getDoctorOutput() {
-        return createExecution({
-          args: ["doctor"],
-          stdout: "Review provider diagnostics"
-        });
-      },
       async loadConfig() {
         return ok({
           version: 1,
@@ -81,11 +75,12 @@ describe("runDoctorCommand", () => {
     expect(lines).toContain(
       "[warn] AlphaXiv is not configured. Latest-paper and paper-metadata access may be weaker. [recommended]"
     );
-    expect(lines).toContain("Feynman Diagnostics");
-    expect(lines).toContain("  Review provider diagnostics");
     expect(lines).toContain(
-      "[warn] Uraniborg can run, but recommended Feynman research capabilities are missing."
+      "[warn] Uraniborg can run, but recommended research capabilities are missing."
     );
+    expect(lines.some((line) => line.includes("Exit code:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stdout:"))).toBe(false);
+    expect(lines.some((line) => line.includes("stderr:"))).toBe(false);
   });
 });
 
@@ -120,15 +115,21 @@ function createAppHomeStatus(): UraniborgAppHomeStatus {
   };
 }
 
-function createReadyRuntimeStatus(): PinnedFeynmanRuntimeStatus {
+function createReadyRuntimeStatus(): FeynmanRuntimeStatus {
   return {
     ready: true,
     code: "ready",
-    manifestPath: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
     executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
-    expectedVersion: "1.2.3",
     detectedVersion: "1.2.3",
-    warnings: []
+    warnings: [],
+    candidates: [
+      {
+        executablePath: "/tmp/alice/.uraniborg/vendor/feynman/bin/feynman",
+        compatible: true,
+        detectedVersion: "1.2.3",
+        details: ["Version: 1.2.3"]
+      }
+    ]
   };
 }
 

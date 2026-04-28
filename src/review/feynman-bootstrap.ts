@@ -1,21 +1,8 @@
-import { access, constants, readFile } from "node:fs/promises";
-import path from "node:path";
+import { access, constants } from "node:fs/promises";
 import { spawn } from "node:child_process";
-
-import { z } from "zod";
+import path from "node:path";
 
 import { createOperationCancelledError } from "../types/cancellation.js";
-import type { UraniborgPaths } from "../types/app-home.js";
-
-const pinnedFeynmanRuntimeManifestSchema = z.object({
-  version: z.string().trim().min(1),
-  executableRelativePath: z.string().trim().min(1).optional()
-});
-
-export interface PinnedFeynmanRuntimeManifest {
-  version: string;
-  executableRelativePath?: string | undefined;
-}
 
 export interface FeynmanCommandExecution {
   executablePath: string;
@@ -36,33 +23,37 @@ export interface FeynmanCommandRunner {
 }
 
 export interface FeynmanRuntimeFilesystem {
-  readFile: (filePath: string) => Promise<string>;
   isExecutable: (filePath: string) => Promise<boolean>;
 }
 
-export type PinnedFeynmanRuntimeStatusCode =
+export type FeynmanRuntimeStatusCode =
   | "ready"
-  | "manifest_missing"
-  | "manifest_invalid"
-  | "executable_missing"
-  | "version_unreadable"
-  | "version_mismatch";
+  | "runtime_missing"
+  | "runtime_incompatible";
 
-export interface PinnedFeynmanRuntimeStatus {
-  ready: boolean;
-  code: PinnedFeynmanRuntimeStatusCode;
-  manifestPath: string;
+export type FeynmanRuntimeCandidateFailureCode =
+  | "version_command_failed"
+  | "version_unreadable";
+
+export interface FeynmanRuntimeCandidate {
   executablePath: string;
-  expectedVersion?: string | undefined;
+  compatible: boolean;
   detectedVersion?: string | undefined;
-  warnings: string[];
+  failureCode?: FeynmanRuntimeCandidateFailureCode | undefined;
+  details: readonly string[];
+}
+
+export interface FeynmanRuntimeStatus {
+  ready: boolean;
+  code: FeynmanRuntimeStatusCode;
+  executablePath?: string | undefined;
+  detectedVersion?: string | undefined;
+  warnings: readonly string[];
+  candidates: readonly FeynmanRuntimeCandidate[];
 }
 
 export function createNodeFeynmanRuntimeFilesystem(): FeynmanRuntimeFilesystem {
   return {
-    async readFile(filePath: string): Promise<string> {
-      return readFile(filePath, "utf8");
-    },
     async isExecutable(filePath: string): Promise<boolean> {
       try {
         await access(filePath, constants.X_OK);
@@ -121,7 +112,7 @@ export function createNodeFeynmanCommandRunner(): FeynmanCommandRunner {
         const abortListener = (): void => {
           child.kill("SIGTERM");
           finalizeReject(
-            createOperationCancelledError("Pinned Feynman command cancelled.")
+            createOperationCancelledError("Feynman command cancelled.")
           );
         };
         const cleanupAbortListener = (): void => {
@@ -162,123 +153,63 @@ export function createNodeFeynmanCommandRunner(): FeynmanCommandRunner {
   };
 }
 
-export async function loadPinnedFeynmanRuntimeManifest(
-  manifestPath: string,
-  filesystem: FeynmanRuntimeFilesystem = createNodeFeynmanRuntimeFilesystem()
-): Promise<PinnedFeynmanRuntimeManifest | null> {
-  try {
-    const fileContents = await filesystem.readFile(manifestPath);
-    const parsedJson = JSON.parse(fileContents) as unknown;
-    const parsedManifest =
-      pinnedFeynmanRuntimeManifestSchema.safeParse(parsedJson);
-
-    return parsedManifest.success ? parsedManifest.data : null;
-  } catch (error) {
-    if (isNodeErrorWithCode(error, "ENOENT")) {
-      return null;
-    }
-
-    throw error;
-  }
-}
-
-export function resolvePinnedFeynmanExecutablePath(
-  paths: Pick<UraniborgPaths, "feynmanRuntimeDirectory">,
-  manifest: PinnedFeynmanRuntimeManifest,
-  platform: NodeJS.Platform = process.platform
-): string {
-  const executableRelativePath =
-    manifest.executableRelativePath ?? getDefaultExecutableRelativePath(platform);
-
-  return path.join(paths.feynmanRuntimeDirectory, executableRelativePath);
-}
-
-export async function inspectPinnedFeynmanRuntime(
-  paths: Pick<UraniborgPaths, "feynmanRuntimeDirectory" | "feynmanRuntimeManifestFile">,
+export async function inspectFeynmanRuntime(
   environment: NodeJS.ProcessEnv = process.env,
   runner: FeynmanCommandRunner = createNodeFeynmanCommandRunner(),
   filesystem: FeynmanRuntimeFilesystem = createNodeFeynmanRuntimeFilesystem(),
   platform: NodeJS.Platform = process.platform
-): Promise<PinnedFeynmanRuntimeStatus> {
-  const manifest = await loadPinnedFeynmanRuntimeManifest(
-    paths.feynmanRuntimeManifestFile,
-    filesystem
-  );
-
-  if (manifest === null) {
-    return {
-      ready: false,
-      code: "manifest_missing",
-      manifestPath: paths.feynmanRuntimeManifestFile,
-      executablePath: path.join(
-        paths.feynmanRuntimeDirectory,
-        getDefaultExecutableRelativePath(platform)
-      ),
-      warnings: []
-    };
-  }
-
-  const executablePath = resolvePinnedFeynmanExecutablePath(paths, manifest, platform);
-  const executableExists = await filesystem.isExecutable(executablePath);
-
-  if (!executableExists) {
-    return {
-      ready: false,
-      code: "executable_missing",
-      manifestPath: paths.feynmanRuntimeManifestFile,
-      executablePath,
-      expectedVersion: manifest.version,
-      warnings: []
-    };
-  }
-
-  const versionResult = await runner.run(executablePath, ["--version"]);
-  const detectedVersion = parseFeynmanVersion(versionResult.stdout);
-
-  if (detectedVersion === null) {
-    return {
-      ready: false,
-      code: "version_unreadable",
-      manifestPath: paths.feynmanRuntimeManifestFile,
-      executablePath,
-      expectedVersion: manifest.version,
-      warnings: []
-    };
-  }
-
-  if (detectedVersion !== manifest.version) {
-    return {
-      ready: false,
-      code: "version_mismatch",
-      manifestPath: paths.feynmanRuntimeManifestFile,
-      executablePath,
-      expectedVersion: manifest.version,
-      detectedVersion,
-      warnings: []
-    };
-  }
-
-  const warnings = await collectPathConflictWarnings(
-    executablePath,
-    detectedVersion,
-    environment,
-    runner,
+): Promise<FeynmanRuntimeStatus> {
+  const executablePaths = await findFeynmanExecutablesOnPath(
+    "feynman",
+    environment["PATH"],
     filesystem,
     platform
   );
 
+  if (executablePaths.length === 0) {
+    return {
+      ready: false,
+      code: "runtime_missing",
+      warnings: [],
+      candidates: []
+    };
+  }
+
+  const candidates: FeynmanRuntimeCandidate[] = [];
+
+  for (const executablePath of executablePaths) {
+    candidates.push(await inspectRuntimeCandidate(executablePath, runner));
+  }
+  const compatibleCandidates = candidates.filter((candidate) => candidate.compatible);
+  const selectedCandidate = compatibleCandidates[0];
+
+  if (selectedCandidate === undefined) {
+    return {
+      ready: false,
+      code: "runtime_incompatible",
+      warnings: [],
+      candidates
+    };
+  }
+
+  const warnings =
+    compatibleCandidates.length > 1
+      ? [
+          `Multiple compatible feynman runtimes were found on PATH. Uraniborg selected ${formatRuntimePathFragment(selectedCandidate.executablePath, selectedCandidate.detectedVersion ?? "unknown")} because it appeared first.`
+        ]
+      : [];
+
   return {
     ready: true,
     code: "ready",
-    manifestPath: paths.feynmanRuntimeManifestFile,
-    executablePath,
-    expectedVersion: manifest.version,
-    detectedVersion,
-    warnings
+    executablePath: selectedCandidate.executablePath,
+    detectedVersion: selectedCandidate.detectedVersion,
+    warnings,
+    candidates
   };
 }
 
-export async function runPinnedFeynmanCommand(
+export async function runFeynmanCommand(
   executablePath: string,
   args: readonly string[],
   options?: {
@@ -294,54 +225,22 @@ export function parseFeynmanVersion(output: string): string | null {
   return versionMatch?.[0] ?? null;
 }
 
-async function collectPathConflictWarnings(
-  pinnedExecutablePath: string,
-  pinnedVersion: string,
-  environment: NodeJS.ProcessEnv,
-  runner: FeynmanCommandRunner,
-  filesystem: FeynmanRuntimeFilesystem,
-  platform: NodeJS.Platform
-): Promise<string[]> {
-  const globalFeynmanPath = await findExecutableOnPath(
-    "feynman",
-    environment["PATH"],
-    filesystem,
-    platform
-  );
-
-  if (globalFeynmanPath === null || globalFeynmanPath === pinnedExecutablePath) {
-    return [];
-  }
-
-  const globalVersionResult = await runner.run(globalFeynmanPath, ["--version"]);
-  const globalVersion = parseFeynmanVersion(globalVersionResult.stdout);
-
-  if (globalVersion === null || globalVersion === pinnedVersion) {
-    return [];
-  }
-
-  return [
-    `Global feynman on PATH (${globalVersionPathFragment(
-      globalFeynmanPath,
-      globalVersion
-    )}) differs from pinned runtime version ${pinnedVersion}. Uraniborg will continue using the pinned runtime.`
-  ];
-}
-
-async function findExecutableOnPath(
+export async function findFeynmanExecutablesOnPath(
   executableName: string,
   environmentPath: string | undefined,
   filesystem: FeynmanRuntimeFilesystem,
   platform: NodeJS.Platform
-): Promise<string | null> {
+): Promise<readonly string[]> {
   if (typeof environmentPath !== "string" || environmentPath.length === 0) {
-    return null;
+    return [];
   }
 
   const executableNames =
     platform === "win32"
       ? [`${executableName}.exe`, `${executableName}.cmd`, executableName]
       : [executableName];
+  const discoveredPaths: string[] = [];
+  const seen = new Set<string>();
 
   for (const pathEntry of environmentPath.split(path.delimiter)) {
     if (pathEntry.length === 0) {
@@ -351,20 +250,83 @@ async function findExecutableOnPath(
     for (const candidateName of executableNames) {
       const candidatePath = path.join(pathEntry, candidateName);
 
+      if (seen.has(candidatePath)) {
+        continue;
+      }
+
+      seen.add(candidatePath);
+
       if (await filesystem.isExecutable(candidatePath)) {
-        return candidatePath;
+        discoveredPaths.push(candidatePath);
       }
     }
   }
 
-  return null;
+  return discoveredPaths;
 }
 
-function getDefaultExecutableRelativePath(platform: NodeJS.Platform): string {
-  return platform === "win32" ? path.join("bin", "feynman.exe") : path.join("bin", "feynman");
+async function inspectRuntimeCandidate(
+  executablePath: string,
+  runner: FeynmanCommandRunner
+): Promise<FeynmanRuntimeCandidate> {
+  try {
+    const execution = await runner.run(executablePath, ["--version"]);
+    const detectedVersion = parseFeynmanVersion(
+      `${execution.stdout}\n${execution.stderr}`
+    );
+
+    if (execution.exitCode !== 0) {
+      return {
+        executablePath,
+        compatible: false,
+        failureCode: "version_command_failed",
+        details: collectExecutionDetails(execution)
+      };
+    }
+
+    if (detectedVersion === null) {
+      return {
+        executablePath,
+        compatible: false,
+        failureCode: "version_unreadable",
+        details: collectExecutionDetails(execution)
+      };
+    }
+
+    return {
+      executablePath,
+      compatible: true,
+      detectedVersion,
+      details: [`Version: ${detectedVersion}`]
+    };
+  } catch (error) {
+    return {
+      executablePath,
+      compatible: false,
+      failureCode: "version_command_failed",
+      details: [error instanceof Error ? error.message : "Unknown version failure."]
+    };
+  }
 }
 
-function globalVersionPathFragment(
+function collectExecutionDetails(
+  execution: FeynmanCommandExecution
+): readonly string[] {
+  const stdout = execution.stdout.trim();
+  const stderr = execution.stderr.trim();
+
+  return [
+    `Exit code: ${execution.exitCode}`,
+    ...(stdout.length > 0 ? [`stdout: ${collapseWhitespace(stdout)}`] : []),
+    ...(stderr.length > 0 ? [`stderr: ${collapseWhitespace(stderr)}`] : [])
+  ];
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function formatRuntimePathFragment(
   executablePath: string,
   version: string
 ): string {

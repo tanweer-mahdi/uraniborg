@@ -104,7 +104,7 @@ describe("run manifest", () => {
 
     expect(snapshot.refineEndpoint).toEqual({
       baseUrl: "https://api.example.com/v1",
-      apiKeyEnvVar: "OPENAI_API_KEY",
+      apiKeyConfigured: true,
       timeoutMs: 60000
     });
   });
@@ -131,7 +131,7 @@ describe("run manifest", () => {
         },
         refineEndpoint: {
           baseUrl: "https://api.example.com/v1",
-          apiKeyEnvVar: "OPENAI_API_KEY",
+          apiKeyConfigured: true,
           timeoutMs: 60000
         }
       },

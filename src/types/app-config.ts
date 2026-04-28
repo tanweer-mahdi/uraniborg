@@ -1,7 +1,8 @@
 export interface UraniborgRefineEndpointConfig {
   baseUrl: string;
-  apiKeyEnvVar: string;
   timeoutMs: number;
+  apiKey?: string | undefined;
+  apiKeyEnvVar?: string | undefined;
 }
 
 export interface UraniborgRefineDefaults {

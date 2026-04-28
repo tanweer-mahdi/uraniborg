@@ -17,16 +17,18 @@ import {
 } from "../../config/index.js";
 import { executeRunLifecycle, type RunExecutionDependencies } from "../../loop/index.js";
 import {
+  collectFeynmanRuntimeSnapshot,
   classifyFeynmanReadiness,
   createNodeFeynmanCommandRunner,
-  getPinnedFeynmanAlphaStatus,
-  getPinnedFeynmanSearchStatus,
-  inspectPinnedFeynmanRuntime,
-  listPinnedFeynmanModels,
+  createSerializedFeynmanCommandRunner,
+  getFeynmanAlphaStatus,
+  getFeynmanSearchStatus,
+  inspectFeynmanRuntime,
+  listFeynmanModels,
   type FeynmanCommandExecution,
   type FeynmanCommandRunner,
   type FeynmanReadinessReport,
-  type PinnedFeynmanRuntimeStatus
+  type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import type { ResolvedUraniborgConfig } from "../../types/app-config.js";
 import { writeInfo } from "../../ui/output.js";
@@ -58,7 +60,7 @@ export function registerRunCommand(program: Command): void {
     .option("--review-model <model>", "Review model exposed by embedded Feynman.")
     .option(
       "--refine-model <model>",
-      "Refinement model name for the configured OpenAI-compatible endpoint."
+      "Revision model name for the configured OpenAI-compatible endpoint."
     )
     .option(
       "--non-interactive",
@@ -80,10 +82,10 @@ export interface RunCommandDependencies
   resolvePaths?: typeof resolveUraniborgPaths;
   ensureAppHome?: typeof ensureUraniborgAppHome;
   loadConfig?: typeof loadUraniborgConfig;
-  inspectRuntime?: typeof inspectPinnedFeynmanRuntime;
-  listModels?: typeof listPinnedFeynmanModels;
-  getAlphaStatus?: typeof getPinnedFeynmanAlphaStatus;
-  getSearchStatus?: typeof getPinnedFeynmanSearchStatus;
+  inspectRuntime?: typeof inspectFeynmanRuntime;
+  listModels?: typeof listFeynmanModels;
+  getAlphaStatus?: typeof getFeynmanAlphaStatus;
+  getSearchStatus?: typeof getFeynmanSearchStatus;
   runner?: FeynmanCommandRunner;
   writeLine?: (message: string) => void;
 }
@@ -102,7 +104,7 @@ interface PreparedRunInput {
 
 interface PreparedRunEnvironment {
   config: ResolvedUraniborgConfig;
-  runtimeStatus: PinnedFeynmanRuntimeStatus;
+  runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
   reviewModels: readonly string[];
   selectedModels: {
@@ -127,7 +129,9 @@ export async function runRunCommand(
     select,
     text
   };
-  const runner = dependencies.runner ?? createNodeFeynmanCommandRunner();
+  const runner = createSerializedFeynmanCommandRunner(
+    dependencies.runner ?? createNodeFeynmanCommandRunner()
+  );
 
   const preparedInput = await prepareRunInput(
     file,
@@ -147,10 +151,10 @@ export async function runRunCommand(
     resolvePaths: dependencies.resolvePaths ?? resolveUraniborgPaths,
     ensureAppHome: dependencies.ensureAppHome ?? ensureUraniborgAppHome,
     loadConfig: dependencies.loadConfig ?? loadUraniborgConfig,
-    inspectRuntime: dependencies.inspectRuntime ?? inspectPinnedFeynmanRuntime,
-    listModels: dependencies.listModels ?? listPinnedFeynmanModels,
-    getAlphaStatus: dependencies.getAlphaStatus ?? getPinnedFeynmanAlphaStatus,
-    getSearchStatus: dependencies.getSearchStatus ?? getPinnedFeynmanSearchStatus,
+    inspectRuntime: dependencies.inspectRuntime ?? inspectFeynmanRuntime,
+    listModels: dependencies.listModels ?? listFeynmanModels,
+    getAlphaStatus: dependencies.getAlphaStatus ?? getFeynmanAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus ?? getFeynmanSearchStatus,
     runner,
     launcher: dependencies.launcher,
     writeLine
@@ -165,7 +169,9 @@ export async function runRunCommand(
         selectedModels: preparedEnvironment.selectedModels,
         config: preparedEnvironment.config,
         runsDirectory: preparedEnvironment.paths.runsDirectory,
-        reviewExecutablePath: preparedEnvironment.runtimeStatus.executablePath
+        reviewExecutablePath: requireRuntimeExecutablePath(
+          preparedEnvironment.runtimeStatus
+        )
       },
       {
         clock: dependencies.clock,
@@ -266,10 +272,10 @@ export async function prepareRunEnvironment(
     resolvePaths: typeof resolveUraniborgPaths;
     ensureAppHome: typeof ensureUraniborgAppHome;
     loadConfig: typeof loadUraniborgConfig;
-    inspectRuntime: typeof inspectPinnedFeynmanRuntime;
-    listModels: typeof listPinnedFeynmanModels;
-    getAlphaStatus: typeof getPinnedFeynmanAlphaStatus;
-    getSearchStatus: typeof getPinnedFeynmanSearchStatus;
+    inspectRuntime: typeof inspectFeynmanRuntime;
+    listModels: typeof listFeynmanModels;
+    getAlphaStatus: typeof getFeynmanAlphaStatus;
+    getSearchStatus: typeof getFeynmanSearchStatus;
     runner: FeynmanCommandRunner;
     launcher: RunCommandDependencies["launcher"];
     writeLine: (message: string) => void;
@@ -279,29 +285,15 @@ export async function prepareRunEnvironment(
 
   await dependencies.ensureAppHome(paths);
 
-  dependencies.writeLine("Uraniborg checks embedded review engine...");
+  dependencies.writeLine("Uraniborg checks the discovered review runtime...");
 
-  const configResult = await dependencies.loadConfig(
-    paths.configFile,
-    dependencies.environment
-  );
-
-  if (!configResult.ok) {
-    throw new Error(
-      `${configResult.error.message} Run \`uraniborg init\` to configure refinement defaults.`
-    );
-  }
-
-  dependencies.writeLine("Uraniborg checks refinement config...");
-
-  let runtimeStatus = await dependencies.inspectRuntime(
-    paths,
-    dependencies.environment,
-    dependencies.runner
-  );
-  const runtimeReadiness = classifyFeynmanReadiness({
-    runtimeStatus
+  let runtimeSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    runner: dependencies.runner
   });
+  let runtimeStatus = runtimeSnapshot.runtimeStatus;
+  const runtimeReadiness = runtimeSnapshot.readinessReport;
 
   await promptAndRunRemediations({
     executablePath: runtimeStatus.executablePath,
@@ -319,28 +311,46 @@ export async function prepareRunEnvironment(
     }
   });
 
-  runtimeStatus = await dependencies.inspectRuntime(
-    paths,
-    dependencies.environment,
-    dependencies.runner
-  );
+  runtimeSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    runner: dependencies.runner
+  });
+  runtimeStatus = runtimeSnapshot.runtimeStatus;
 
   if (!runtimeStatus.ready) {
     throw new Error(
-      classifyFeynmanReadiness({
-        runtimeStatus
-      }).checks[0]?.summary ?? "Pinned Feynman runtime is not ready."
+      runtimeSnapshot.readinessReport.checks[0]?.summary ??
+        "Compatible Feynman runtime is not ready."
     );
   }
 
-  let modelListExecution = await dependencies.listModels(
-    runtimeStatus.executablePath,
-    dependencies.runner
+  dependencies.writeLine(
+    `Using Feynman runtime: ${requireRuntimeExecutablePath(runtimeStatus)}${typeof runtimeStatus.detectedVersion === "string" ? ` (version ${runtimeStatus.detectedVersion})` : ""}.`
   );
-  let discoveryReadiness = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution
+
+  dependencies.writeLine("Uraniborg checks revision setup...");
+
+  const configResult = await dependencies.loadConfig(
+    paths.configFile,
+    dependencies.environment
+  );
+
+  if (!configResult.ok) {
+    throw new Error(
+      `${configResult.error.message} Run \`uraniborg revision --setup\` or \`uraniborg init\` to configure revision defaults.`
+    );
+  }
+
+  let discoverySnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    runner: dependencies.runner,
+    includeReviewModels: true
   });
+  let modelListExecution = discoverySnapshot.modelListExecution;
+  let discoveryReadiness = discoverySnapshot.readinessReport;
 
   await promptAndRunRemediations({
     executablePath: runtimeStatus.executablePath,
@@ -355,14 +365,15 @@ export async function prepareRunEnvironment(
     }
   });
 
-  modelListExecution = await dependencies.listModels(
-    runtimeStatus.executablePath,
-    dependencies.runner
-  );
-  discoveryReadiness = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution
+  discoverySnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    runner: dependencies.runner,
+    includeReviewModels: true
   });
+  modelListExecution = discoverySnapshot.modelListExecution;
+  discoveryReadiness = discoverySnapshot.readinessReport;
 
   if (!discoveryReadiness.requiredReady || discoveryReadiness.reviewModels.length === 0) {
     throw new Error(
@@ -388,21 +399,18 @@ export async function prepareRunEnvironment(
     }
   );
 
-  let alphaStatusExecution = await dependencies.getAlphaStatus(
-    runtimeStatus.executablePath,
-    dependencies.runner
-  );
-  let searchStatusExecution = await dependencies.getSearchStatus(
-    runtimeStatus.executablePath,
-    dependencies.runner
-  );
-  let readinessReport = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution,
-    selectedReviewModel: reviewModel,
-    alphaStatusExecution,
-    searchStatusExecution
+  let readinessSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
+    runner: dependencies.runner,
+    includeReviewModels: true,
+    includeCapabilities: true,
+    selectedReviewModel: reviewModel
   });
+  let readinessReport = readinessSnapshot.readinessReport;
 
   await promptAndRunRemediations({
     executablePath: runtimeStatus.executablePath,
@@ -417,25 +425,18 @@ export async function prepareRunEnvironment(
     }
   });
 
-  modelListExecution = await dependencies.listModels(
-    runtimeStatus.executablePath,
-    dependencies.runner
-  );
-  alphaStatusExecution = await dependencies.getAlphaStatus(
-    runtimeStatus.executablePath,
-    dependencies.runner
-  );
-  searchStatusExecution = await dependencies.getSearchStatus(
-    runtimeStatus.executablePath,
-    dependencies.runner
-  );
-  readinessReport = classifyFeynmanReadiness({
-    runtimeStatus,
-    modelListExecution,
-    selectedReviewModel: reviewModel,
-    alphaStatusExecution,
-    searchStatusExecution
+  readinessSnapshot = await collectFeynmanRuntimeSnapshot({
+    environment: dependencies.environment,
+    inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
+    runner: dependencies.runner,
+    includeReviewModels: true,
+    includeCapabilities: true,
+    selectedReviewModel: reviewModel
   });
+  readinessReport = readinessSnapshot.readinessReport;
 
   if (!readinessReport.requiredReady) {
     const requiredFailure = readinessReport.checks.find(
@@ -478,6 +479,18 @@ export async function prepareRunEnvironment(
     },
     paths
   };
+}
+
+function requireRuntimeExecutablePath(
+  runtimeStatus: FeynmanRuntimeStatus
+): string {
+  const runtimeExecutablePath = runtimeStatus.executablePath;
+
+  if (runtimeStatus.ready && typeof runtimeExecutablePath === "string") {
+    return runtimeExecutablePath;
+  }
+
+  throw new Error("Ready Feynman runtime did not include an executable path.");
 }
 
 async function selectReviewModel(
@@ -549,12 +562,12 @@ async function selectRefineModel(
   }
 
   const response = await dependencies.prompts.text({
-    message: "Which refine model?",
+    message: "Which revision model?",
     defaultValue: config.refine.defaults.model,
     validate(value) {
       return value.trim().length > 0
         ? undefined
-        : "Enter a refinement model name.";
+        : "Enter a revision model name.";
     }
   });
 

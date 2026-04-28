@@ -1,113 +1,122 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  inspectPinnedFeynmanRuntime,
-  loadPinnedFeynmanRuntimeManifest,
+  findFeynmanExecutablesOnPath,
+  inspectFeynmanRuntime,
   parseFeynmanVersion,
-  resolvePinnedFeynmanExecutablePath,
   type FeynmanCommandExecution,
   type FeynmanCommandRunner,
   type FeynmanRuntimeFilesystem
 } from "../../src/review/feynman-bootstrap.js";
 
-describe("loadPinnedFeynmanRuntimeManifest", () => {
-  it("loads the pinned runtime manifest from the runtime directory", async () => {
-    const manifest = await loadPinnedFeynmanRuntimeManifest(
-      "/tmp/runtime.json",
-      createRuntimeFilesystem({
-        "/tmp/runtime.json": JSON.stringify({
-          version: "1.2.3",
-          executableRelativePath: "bin/feynman"
-        })
-      })
-    );
+describe("findFeynmanExecutablesOnPath", () => {
+  it("returns executable candidates in PATH order", async () => {
+    const filesystem = createRuntimeFilesystem();
+    filesystem.executables.add("/usr/local/bin/feynman");
+    filesystem.executables.add("/opt/homebrew/bin/feynman");
 
-    expect(manifest).toEqual({
-      version: "1.2.3",
-      executableRelativePath: "bin/feynman"
-    });
-  });
-});
-
-describe("resolvePinnedFeynmanExecutablePath", () => {
-  it("defaults to a bin/feynman executable path on posix systems", () => {
-    expect(
-      resolvePinnedFeynmanExecutablePath(
-        {
-          feynmanRuntimeDirectory: "/tmp/vendor/feynman"
-        },
-        { version: "1.2.3" },
+    await expect(
+      findFeynmanExecutablesOnPath(
+        "feynman",
+        "/usr/local/bin:/opt/homebrew/bin",
+        filesystem,
         "darwin"
       )
-    ).toBe("/tmp/vendor/feynman/bin/feynman");
+    ).resolves.toEqual([
+      "/usr/local/bin/feynman",
+      "/opt/homebrew/bin/feynman"
+    ]);
   });
 });
 
-describe("inspectPinnedFeynmanRuntime", () => {
-  it("reports a ready runtime when the manifest, binary, and version all match", async () => {
-    const filesystem = createRuntimeFilesystem({
-      "/tmp/vendor/feynman/runtime.json": JSON.stringify({
-        version: "1.2.3"
-      })
-    });
-    filesystem.executables.add("/tmp/vendor/feynman/bin/feynman");
+describe("inspectFeynmanRuntime", () => {
+  it("selects the first compatible runtime discovered on PATH", async () => {
+    const filesystem = createRuntimeFilesystem();
+    filesystem.executables.add("/usr/local/bin/feynman");
+    filesystem.executables.add("/opt/homebrew/bin/feynman");
     const runner = createRunner([
       {
-        executablePath: "/tmp/vendor/feynman/bin/feynman",
+        executablePath: "/usr/local/bin/feynman",
         args: ["--version"],
         exitCode: 0,
         stdout: "feynman 1.2.3\n",
         stderr: ""
+      },
+      {
+        executablePath: "/opt/homebrew/bin/feynman",
+        args: ["--version"],
+        exitCode: 0,
+        stdout: "feynman 1.3.0\n",
+        stderr: ""
       }
     ]);
 
-    const status = await inspectPinnedFeynmanRuntime(
+    const status = await inspectFeynmanRuntime(
       {
-        feynmanRuntimeDirectory: "/tmp/vendor/feynman",
-        feynmanRuntimeManifestFile: "/tmp/vendor/feynman/runtime.json"
+        PATH: "/usr/local/bin:/opt/homebrew/bin"
       },
-      {},
       runner,
       filesystem,
       "darwin"
     );
 
-    expect(status.ready).toBe(true);
-    expect(status.code).toBe("ready");
-    expect(status.detectedVersion).toBe("1.2.3");
-    expect(status.warnings).toEqual([]);
+    expect(status).toEqual({
+      ready: true,
+      code: "ready",
+      executablePath: "/usr/local/bin/feynman",
+      detectedVersion: "1.2.3",
+      warnings: [
+        "Multiple compatible feynman runtimes were found on PATH. Uraniborg selected /usr/local/bin/feynman, version 1.2.3 because it appeared first."
+      ],
+      candidates: [
+        {
+          executablePath: "/usr/local/bin/feynman",
+          compatible: true,
+          detectedVersion: "1.2.3",
+          details: ["Version: 1.2.3"]
+        },
+        {
+          executablePath: "/opt/homebrew/bin/feynman",
+          compatible: true,
+          detectedVersion: "1.3.0",
+          details: ["Version: 1.3.0"]
+        }
+      ]
+    });
   });
 
-  it("warns when a conflicting global feynman is available on PATH", async () => {
-    const filesystem = createRuntimeFilesystem({
-      "/tmp/vendor/feynman/runtime.json": JSON.stringify({
-        version: "1.2.3"
-      })
+  it("reports runtime_missing when PATH contains no feynman executable", async () => {
+    await expect(
+      inspectFeynmanRuntime(
+        {
+          PATH: "/usr/local/bin"
+        },
+        createRunner([]),
+        createRuntimeFilesystem(),
+        "darwin"
+      )
+    ).resolves.toEqual({
+      ready: false,
+      code: "runtime_missing",
+      warnings: [],
+      candidates: []
     });
-    filesystem.executables.add("/tmp/vendor/feynman/bin/feynman");
+  });
+
+  it("reports runtime_incompatible when discovered candidates fail compatibility checks", async () => {
+    const filesystem = createRuntimeFilesystem();
     filesystem.executables.add("/usr/local/bin/feynman");
     const runner = createRunner([
-      {
-        executablePath: "/tmp/vendor/feynman/bin/feynman",
-        args: ["--version"],
-        exitCode: 0,
-        stdout: "feynman 1.2.3\n",
-        stderr: ""
-      },
       {
         executablePath: "/usr/local/bin/feynman",
         args: ["--version"],
         exitCode: 0,
-        stdout: "feynman 9.9.9\n",
+        stdout: "not-a-version\n",
         stderr: ""
       }
     ]);
 
-    const status = await inspectPinnedFeynmanRuntime(
-      {
-        feynmanRuntimeDirectory: "/tmp/vendor/feynman",
-        feynmanRuntimeManifestFile: "/tmp/vendor/feynman/runtime.json"
-      },
+    const status = await inspectFeynmanRuntime(
       {
         PATH: "/usr/local/bin"
       },
@@ -116,26 +125,16 @@ describe("inspectPinnedFeynmanRuntime", () => {
       "darwin"
     );
 
-    expect(status.ready).toBe(true);
-    expect(status.warnings).toEqual([
-      "Global feynman on PATH (/usr/local/bin/feynman, version 9.9.9) differs from pinned runtime version 1.2.3. Uraniborg will continue using the pinned runtime."
-    ]);
-  });
-
-  it("fails when the runtime manifest is missing", async () => {
-    const status = await inspectPinnedFeynmanRuntime(
-      {
-        feynmanRuntimeDirectory: "/tmp/vendor/feynman",
-        feynmanRuntimeManifestFile: "/tmp/vendor/feynman/runtime.json"
-      },
-      {},
-      createRunner([]),
-      createRuntimeFilesystem({}),
-      "darwin"
-    );
-
     expect(status.ready).toBe(false);
-    expect(status.code).toBe("manifest_missing");
+    expect(status.code).toBe("runtime_incompatible");
+    expect(status.candidates).toEqual([
+      {
+        executablePath: "/usr/local/bin/feynman",
+        compatible: false,
+        failureCode: "version_unreadable",
+        details: ["Exit code: 0", "stdout: not-a-version"]
+      }
+    ]);
   });
 });
 
@@ -150,22 +149,9 @@ interface MemoryRuntimeFilesystem extends FeynmanRuntimeFilesystem {
   executables: Set<string>;
 }
 
-function createRuntimeFilesystem(
-  files: Record<string, string>
-): MemoryRuntimeFilesystem {
+function createRuntimeFilesystem(): MemoryRuntimeFilesystem {
   return {
     executables: new Set<string>(),
-    async readFile(filePath: string): Promise<string> {
-      const fileContents = files[filePath];
-
-      if (typeof fileContents !== "string") {
-        const error = new Error(`Missing file: ${filePath}`) as NodeJS.ErrnoException;
-        error.code = "ENOENT";
-        throw error;
-      }
-
-      return fileContents;
-    },
     async isExecutable(filePath: string): Promise<boolean> {
       return this.executables.has(filePath);
     }
