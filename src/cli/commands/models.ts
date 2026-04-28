@@ -32,7 +32,7 @@ import {
 export function registerModelsCommand(program: Command): void {
   program
     .command("models")
-    .description("Show review and refinement model availability.")
+    .description("Show review and revision model availability.")
     .action(async () => {
       await runModelsCommand();
     });
@@ -153,11 +153,11 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
     );
   }
 
-  lines.push("", "Refinement");
+  lines.push("", "Revision");
 
   if (report.resolvedConfigResult.ok) {
     lines.push(
-      `[ok] Refinement setup is ready.`
+      `[ok] Revision setup is ready.`
     );
     lines.push(
       `Endpoint: ${report.resolvedConfigResult.value.refine.endpoint.baseUrl}`

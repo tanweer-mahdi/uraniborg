@@ -697,7 +697,7 @@ describe("prepareRunEnvironment", () => {
 
     expect(launchedCommands).toEqual([]);
     expect(lines).not.toContain(
-      "Launching feynman setup via the selected Feynman runtime..."
+      "Launching Feynman setup via the selected Feynman runtime..."
     );
   });
 

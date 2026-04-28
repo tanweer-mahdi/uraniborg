@@ -93,11 +93,11 @@ export function resolveUraniborgConfigSecrets(
       message:
         typeof apiKeyEnvVar === "string"
           ? `Environment variable "${apiKeyEnvVar}" is not set.`
-          : "Refinement API key is not configured.",
+          : "Revision API key is not configured.",
       details: [
         typeof apiKeyEnvVar === "string"
-          ? "Set the configured API key environment variable before running refinement."
-          : "Run `uraniborg init` to provide a refine API key."
+          ? "Set the configured API key environment variable before running revision."
+          : "Run `uraniborg revision --setup` or `uraniborg init` to provide a revision API key."
       ]
     });
   }

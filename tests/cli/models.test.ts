@@ -8,7 +8,7 @@ import type {
 } from "../../src/review/index.js";
 
 describe("runModelsCommand", () => {
-  it("shows review model remediation guidance and configured refine defaults", async () => {
+  it("shows review model remediation guidance and configured revision defaults", async () => {
     const lines: string[] = [];
 
     await runModelsCommand({
@@ -87,7 +87,7 @@ describe("runModelsCommand", () => {
     expect(lines).toContain(
       "[fail] Review model discovery is not ready through the selected Feynman runtime."
     );
-    expect(lines).toContain("[ok] Refinement setup is ready.");
+    expect(lines).toContain("[ok] Revision setup is ready.");
     expect(lines).toContain("Endpoint: https://api.example.com/v1");
     expect(lines).toContain("Default model: gpt-5");
     expect(lines.some((line) => line.includes("Recommended Capabilities"))).toBe(

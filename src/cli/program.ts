@@ -4,6 +4,7 @@ import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerHistoryCommand } from "./commands/history.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerModelsCommand } from "./commands/models.js";
+import { registerRevisionCommand } from "./commands/revision.js";
 import { registerResumeCommand } from "./commands/resume.js";
 import { registerRunCommand } from "./commands/run.js";
 import { writeError } from "../ui/output.js";
@@ -13,11 +14,12 @@ export function createProgram(): Command {
 
   program
     .name("uraniborg")
-    .description("Run deterministic draft review and refinement loops.")
+    .description("Run deterministic draft review and revision loops.")
     .showHelpAfterError()
     .showSuggestionAfterError();
 
   registerInitCommand(program);
+  registerRevisionCommand(program);
   registerDoctorCommand(program);
   registerModelsCommand(program);
   registerRunCommand(program);

@@ -60,7 +60,7 @@ export function registerRunCommand(program: Command): void {
     .option("--review-model <model>", "Review model exposed by embedded Feynman.")
     .option(
       "--refine-model <model>",
-      "Refinement model name for the configured OpenAI-compatible endpoint."
+      "Revision model name for the configured OpenAI-compatible endpoint."
     )
     .option(
       "--non-interactive",
@@ -329,7 +329,7 @@ export async function prepareRunEnvironment(
     `Using Feynman runtime: ${requireRuntimeExecutablePath(runtimeStatus)}${typeof runtimeStatus.detectedVersion === "string" ? ` (version ${runtimeStatus.detectedVersion})` : ""}.`
   );
 
-  dependencies.writeLine("Uraniborg checks refinement setup...");
+  dependencies.writeLine("Uraniborg checks revision setup...");
 
   const configResult = await dependencies.loadConfig(
     paths.configFile,
@@ -338,7 +338,7 @@ export async function prepareRunEnvironment(
 
   if (!configResult.ok) {
     throw new Error(
-      `${configResult.error.message} Run \`uraniborg init\` to configure refinement defaults.`
+      `${configResult.error.message} Run \`uraniborg revision --setup\` or \`uraniborg init\` to configure revision defaults.`
     );
   }
 
@@ -562,12 +562,12 @@ async function selectRefineModel(
   }
 
   const response = await dependencies.prompts.text({
-    message: "Which refine model?",
+    message: "Which revision model?",
     defaultValue: config.refine.defaults.model,
     validate(value) {
       return value.trim().length > 0
         ? undefined
-        : "Enter a refinement model name.";
+        : "Enter a revision model name.";
     }
   });
 

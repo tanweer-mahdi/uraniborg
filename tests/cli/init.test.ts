@@ -63,9 +63,9 @@ describe("runInitCommand", () => {
     });
 
     expect(promptsAsked).toEqual([
-      "OpenAI-compatible refine endpoint URL",
-      "Refine API key",
-      "Default refinement model"
+      "OpenAI-compatible revision endpoint URL",
+      "Revision API key",
+      "Default revision model"
     ]);
     expect(savedConfig).toEqual({
       version: 1,
