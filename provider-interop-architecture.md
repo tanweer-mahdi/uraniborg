@@ -131,6 +131,8 @@ interface CredentialRecord {
 }
 ```
 
+The canonical `CredentialRecord` above is application-facing and provider-neutral. A Pi-based implementation MAY persist an equivalent provider-native record shape in `AuthStorage`, for example Pi's built-in OAuth entries of the form `type: "oauth"` with fields such as `access`, `refresh`, `expires`, `accountId`, `projectId`, or provider-specific metadata.
+
 ### 4.3 Canonical Event Stream
 
 The provider output MUST be normalized into an implementation-wide event model such as:
@@ -176,6 +178,8 @@ The implementation SHOULD resolve credentials in the following order:
 This order ensures deterministic override behavior while preserving operational flexibility.
 
 In a Pi-based implementation, this resolution order SHOULD be delegated to Pi's `AuthStorage` and `ModelRegistry` rather than recreated in application code.
+
+When Pi's `AuthStorage` is reused for OAuth providers, a conforming implementation SHOULD rely on Pi's built-in refresh behavior, including request-time refresh of expired credentials and backend locking to prevent concurrent refresh races across multiple runtime instances.
 
 ### 5.3 Supported Authentication Classes
 
@@ -307,6 +311,8 @@ Anthropic Claude SHOULD be modeled as one provider family with two authenticatio
 
 The runtime contract MUST remain constant across both modes.
 
+In Pi, the built-in provider identity for this family is `anthropic`. A conforming Pi-based implementation SHOULD reuse that provider identity for both API-key and OAuth-backed Claude rather than introducing separate application-defined provider ids.
+
 #### 7.2.2 Authentication
 
 - API-key mode MUST support secure storage and environment-variable resolution.
@@ -316,11 +322,51 @@ The runtime contract MUST remain constant across both modes.
 
 In Pi-based projects, these two modes SHOULD remain one provider family with mode-aware credential resolution rather than two unrelated application integrations.
 
+For Pi built-in reuse, the preferred OAuth bootstrap sequence is:
+
+1. Call `AuthStorage.login("anthropic", callbacks)` or the equivalent built-in provider login path.
+2. Let Pi start its built-in localhost callback server on `127.0.0.1:53692` with redirect URI `http://localhost:53692/callback`.
+3. Let Pi open or display the authorization URL for the browser flow.
+4. If `onManualCodeInput` is available, race the browser callback against a user-pasted redirect value.
+5. If neither path yields a code, prompt the user to paste either the raw authorization code or the full redirect URL.
+6. Let Pi perform token exchange and persist the resulting OAuth credential through `AuthStorage`.
+
+Pi's built-in Anthropic parser accepts either a raw code or a full redirect value containing `code` and `state`. An implementation SHOULD preserve that flexibility rather than narrowing the manual fallback to one input shape.
+
+The implementation MUST NOT reimplement PKCE, callback handling, state validation, token exchange, or token refresh when Pi's built-in `anthropic` OAuth provider is available.
+
+The built-in Pi Anthropic OAuth path is Node/Bun CLI-oriented. It uses a localhost callback server plus manual paste fallback; it does not provide a device-code flow.
+
+When Pi's built-in `anthropic` OAuth provider is reused, the browser consent screen branding is owned by the OAuth client registration behind that provider, not by the embedding application. A Pi-based application SHOULD therefore expect provider-native or upstream-tool branding such as `Claude Code` on the consent screen unless it deliberately stops reusing the built-in provider and registers its own first-party OAuth client.
+
+For Pi's built-in `anthropic` OAuth path, the persisted credential contract is effectively:
+
+```ts
+{
+  type: "oauth";
+  access: string;
+  refresh: string;
+  expires: number;
+}
+```
+
+Anthropic does not require additional tenant, account, or project context in the credential object.
+
+Pi's refresh behavior SHOULD be treated as authoritative:
+
+- expired Anthropic OAuth credentials SHOULD be refreshed lazily at request time
+- refreshed expiry SHOULD use a safety buffer before the server-advertised absolute expiry
+- application code SHOULD consume Pi's resolved auth result rather than refreshing tokens independently
+
+If environment fallback is in play, Pi's Anthropic resolution prefers `ANTHROPIC_OAUTH_TOKEN` ahead of `ANTHROPIC_API_KEY`. An implementation that documents environment resolution SHOULD reflect that actual precedence.
+
 #### 7.2.3 Base URL Semantics
 
 The canonical base URL MUST be the API root, not the `/v1` subpath. The transport layer SHOULD append the correct path segments internally.
 
 For compatibility with proxies, the implementation MAY permit a root base URL override and MAY optionally duplicate bearer authentication in addition to the native key header model.
+
+When Pi's built-in Anthropic adapter is reused, the application SHOULD pass the API root or proxy root only. Pi passes `model.baseUrl` through to the Anthropic SDK, and the SDK itself appends `/v1/messages` and related API paths. Application code SHOULD NOT append `/v1` manually.
 
 #### 7.2.4 Request Model
 
@@ -349,11 +395,19 @@ OAuth mode MAY require additional identity headers such as:
 
 These mode-specific headers MUST be encapsulated inside `TransportDriver`, not application logic.
 
+When Pi's built-in Anthropic adapter is reused, the explicit version header and SDK-required request wiring SHOULD remain SDK-owned or provider-owned behavior, not application-owned behavior.
+
 #### 7.2.6 Session and Caching Semantics
 
 Anthropic caching SHOULD be modeled as transport-level cache control, not transcript-level session state.
 
 The implementation MAY mark selected prompt segments as cacheable or ephemeral where the provider supports explicit cache directives.
+
+Pi ownership boundaries for Claude SHOULD be explicit:
+
+- Pi owns OAuth plumbing, token exchange, refresh, env precedence, and request-time auth/header synthesis
+- application code owns UI presentation, optional persistence only if it bypasses `AuthStorage`, and transcript/session state
+- transcript/session state MUST remain separate from OAuth credential state
 
 ### 7.3 Google Gemini
 
@@ -366,6 +420,17 @@ At minimum, the architecture SHOULD distinguish:
 - direct Gemini API
 - Gemini CLI / Cloud Code Assist style OAuth path
 - Vertex-style enterprise deployment
+
+For Pi-based reuse, these SHOULD map to explicit Pi provider identities rather than one overloaded `gemini` implementation:
+
+| Variant | Pi provider id | Primary auth class | Default endpoint family | Project context source |
+| --- | --- | --- | --- | --- |
+| direct Gemini API | `google` | API key | `https://generativelanguage.googleapis.com/v1beta` | none in credential |
+| Gemini CLI / Cloud Code Assist | `google-gemini-cli` | OAuth 2.0 with PKCE | `https://cloudcode-pa.googleapis.com` | `projectId` stored in OAuth credential |
+| Google Antigravity variant | `google-antigravity` | OAuth 2.0 with PKCE | sandbox or Google-managed Cloud Code Assist endpoints | `projectId` stored in OAuth credential |
+| Vertex AI | `google-vertex` | ADC, service account, or enterprise API key | `https://{location}-aiplatform.googleapis.com` | runtime config or env, not OAuth credential state |
+
+An implementation SHOULD expose `google-gemini-cli` as the default browser-login Gemini path unless it intentionally offers `google-antigravity` as a distinct advanced or experimental variant. It MUST NOT silently substitute one for the other.
 
 #### 7.3.2 Authentication
 
@@ -386,6 +451,40 @@ Vertex-style enterprise deployment:
 
 Pi-based projects SHOULD represent these as distinct Pi provider identities or variants where the account-context contract differs materially.
 
+For Pi built-in reuse, the preferred browser-login recipe for `google-gemini-cli` is:
+
+1. Call `AuthStorage.login("google-gemini-cli", callbacks)` or the equivalent built-in provider login path.
+2. Let Pi start its built-in localhost callback server on `127.0.0.1:8085` with redirect URI `http://localhost:8085/oauth2callback`.
+3. Let Pi drive the PKCE authorization-code flow in the browser.
+4. If `onManualCodeInput` is available, race the browser callback against a user-pasted redirect URL.
+5. Let Pi exchange the code for refreshable credentials, fetch optional user email, and discover or provision the Cloud Code Assist project context.
+6. Persist the resulting OAuth credential through `AuthStorage`.
+
+The manual path for Pi's Gemini OAuth flows is a pasted redirect URL, not a device-code flow. The built-in implementation validates returned state against the PKCE verifier and fails closed on mismatch.
+
+When Pi's built-in Gemini OAuth providers are reused, the browser consent screen branding is owned by the underlying OAuth client registration, not by the embedding application. A Pi-based application SHOULD expect provider-native or upstream-tool branding such as `Gemini CLI`, `Cloud Code Assist`, or other Google-owned client identity on the consent screen unless it deliberately registers and maintains its own first-party OAuth client instead of reusing Pi built-ins.
+
+For Pi's built-in `google-gemini-cli` OAuth path, the persisted credential contract is effectively:
+
+```ts
+{
+  type: "oauth";
+  access: string;
+  refresh: string;
+  expires: number;
+  projectId: string;
+  email?: string;
+}
+```
+
+The provider-owned `projectId` is mandatory. Login MUST fail if required project context cannot be discovered or provisioned.
+
+At request time, Pi's built-in `google-gemini-cli` provider treats the resolved auth material as an opaque provider payload rather than a raw bearer token. Its `getApiKey()` contract serializes the credential as JSON containing both token and project id. Application code SHOULD treat that Pi-resolved value as opaque and MUST NOT assume that a Gemini OAuth credential resolves to a bare access token string.
+
+If Google does not return a new refresh token during refresh, the built-in Pi Gemini OAuth helpers preserve the existing refresh token. Application code SHOULD NOT treat refresh-token rotation as guaranteed on every refresh response.
+
+`google-antigravity` SHOULD be documented as a separate Pi-managed OAuth variant, not as an alias for `google-gemini-cli`. It uses its own client credentials, callback server on `127.0.0.1:51121` with redirect URI `http://localhost:51121/oauth-callback`, and endpoint defaults, while still following the same high-level Pi ownership model of PKCE, callback-server handling, refresh, and `projectId`-bearing OAuth credentials.
+
 #### 7.3.3 Project and Account Context
 
 For OAuth-based Gemini variants, the credential object SHOULD include both:
@@ -395,6 +494,13 @@ For OAuth-based Gemini variants, the credential object SHOULD include both:
 
 The transport path MUST reject credentials that are missing mandatory project context.
 
+The architecture MUST distinguish two different forms of Gemini project context:
+
+- for `google-gemini-cli` and `google-antigravity`, `projectId` is credential state discovered or confirmed during OAuth bootstrap and persisted with the OAuth record
+- for `google-vertex`, project and location are runtime/provider configuration, not OAuth credential state
+
+For `google-gemini-cli`, Pi's built-in bootstrap MAY consult `GOOGLE_CLOUD_PROJECT` or `GOOGLE_CLOUD_PROJECT_ID` when the account tier requires caller-supplied project selection.
+
 #### 7.3.4 Endpoints
 
 Direct Gemini API SHOULD use a Generative AI endpoint family and MAY allow explicit base URL override for custom or proxied deployments.
@@ -402,6 +508,15 @@ Direct Gemini API SHOULD use a Generative AI endpoint family and MAY allow expli
 Gemini CLI / Cloud Code Assist SHOULD be treated as provider-owned endpoints with limited or no application-managed base URL responsibility.
 
 Vertex deployments MUST carry project and location context and SHOULD be treated as enterprise cloud endpoints rather than consumer API endpoints.
+
+If Pi's built-in providers are reused, the default endpoint expectations are:
+
+- `google`: Generative AI base URL family
+- `google-gemini-cli`: `https://cloudcode-pa.googleapis.com`
+- `google-antigravity`: provider-managed Google Cloud Code Assist endpoint family, with sandbox-oriented defaults
+- `google-vertex`: `https://{location}-aiplatform.googleapis.com`
+
+Application code SHOULD NOT normalize these variants into one endpoint template.
 
 #### 7.3.5 Request and Stream Model
 
@@ -411,6 +526,24 @@ The runtime contract SHOULD remain provider-neutral:
 - normalized stream of assistant events out
 
 The application MUST NOT branch on Gemini sub-variant inside ordinary message orchestration code.
+
+The built-in Pi Cloud Code Assist Gemini paths are currently SSE-over-HTTPS transports. An implementation that reuses Pi built-ins SHOULD document them as SSE-based today and MUST NOT claim built-in WebSocket transport support unless it has registered a custom provider that actually implements it.
+
+Pi ownership boundaries for Gemini SHOULD be explicit:
+
+- Pi owns OAuth callback handling, token exchange, refresh, auth-file persistence, project discovery or provisioning where built-in providers support it, and request-time auth/header synthesis
+- application code owns UX, profile or variant selection, and transcript/session state
+- transcript/session state MUST remain separate from OAuth credential state such as `projectId`
+
+## 8.1 OAuth Branding Trade-off
+
+When a Pi-based implementation reuses Pi's built-in OAuth providers, it is reusing the OAuth client registrations, redirect-uri registrations, and provider-approved app identities attached to those providers. The consent-screen branding seen by the user therefore comes from those upstream OAuth clients rather than from the embedding application.
+
+Consequently:
+
+- Pi built-in reuse SHOULD be understood as a deliberate trade-off: fastest path to working browser login, but consent screens may show provider-native or upstream-tool branding rather than the embedding application's name
+- an application that requires first-party consent branding MUST register and maintain its own OAuth clients and redirect URIs instead of relying exclusively on Pi's built-in provider registrations
+- this trade-off applies independently to Claude, OpenAI/Codex, Gemini, and any other Pi-managed OAuth provider
 
 ## 8. Cross-Provider Design Rules
 
@@ -553,3 +686,15 @@ These package manifests record the upstream repository coordinates used by the i
 - repository: `https://github.com/badlogic/pi-mono.git`
 - coding-agent directory: `packages/coding-agent`
 - ai directory: `packages/ai`
+
+### B.8 Pi OAuth Built-ins Referenced by This Architecture
+
+- Claude / Anthropic OAuth provider: [anthropic.js](/Users/shahmahdihasan/feynman/node_modules/@mariozechner/pi-ai/dist/utils/oauth/anthropic.js)
+- Gemini CLI / Cloud Code Assist OAuth provider: [google-gemini-cli.js](/Users/shahmahdihasan/feynman/node_modules/@mariozechner/pi-ai/dist/utils/oauth/google-gemini-cli.js)
+- Google Antigravity OAuth provider: [google-antigravity.js](/Users/shahmahdihasan/feynman/node_modules/@mariozechner/pi-ai/dist/utils/oauth/google-antigravity.js)
+- OAuth provider registry helpers: [index.js](/Users/shahmahdihasan/feynman/node_modules/@mariozechner/pi-ai/dist/utils/oauth/index.js)
+
+### B.9 Pi Auth and Provider Resolution Implementations
+
+- Auth persistence and refresh locking: [auth-storage.js](/Users/shahmahdihasan/feynman/node_modules/@mariozechner/pi-coding-agent/dist/core/auth-storage.js)
+- Model and provider resolution: [model-registry.js](/Users/shahmahdihasan/feynman/node_modules/@mariozechner/pi-coding-agent/dist/core/model-registry.js)
