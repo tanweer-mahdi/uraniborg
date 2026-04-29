@@ -12,9 +12,9 @@ export {
   type ResolvedUraniborgConfig,
   type UraniborgConfig,
   type UraniborgConfigLoadError,
-  type UraniborgConfigLoadErrorCode,
   type UraniborgConfigReadWriter,
-  type UraniborgRefineDefaults,
-  type UraniborgRefineEndpointConfig
+  type UraniborgRevisionConfig,
+  type UraniborgRevisionCredentialBinding,
+  type UraniborgRevisionDefaults,
 } from "./app-config.js";
 export { ok, err, type Result } from "./result.js";

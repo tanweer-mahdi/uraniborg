@@ -1,10 +1,11 @@
 import type { Command } from "commander";
 
 import {
-  loadUraniborgConfig,
   loadParsedUraniborgConfig,
+  loadRevisionSetupReadiness,
   resolveUraniborgPaths
 } from "../../config/index.js";
+import { getRevisionProfileLabel } from "../../config/revision-profiles.js";
 import {
   collectFeynmanRuntimeSnapshot,
   createNodeFeynmanCommandRunner,
@@ -18,7 +19,6 @@ import {
   type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import type {
-  ResolvedUraniborgConfig,
   UraniborgConfig,
   UraniborgConfigLoadError
 } from "../../types/app-config.js";
@@ -44,7 +44,7 @@ export interface ModelsCommandDependencies extends SharedRemediationDependencies
   listModels?: typeof listFeynmanModels;
   getAlphaStatus?: typeof getFeynmanAlphaStatus;
   getSearchStatus?: typeof getFeynmanSearchStatus;
-  loadConfig?: typeof loadUraniborgConfig;
+  loadConfig?: typeof loadRevisionSetupReadiness;
   loadParsedConfig?: typeof loadParsedUraniborgConfig;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
@@ -54,7 +54,7 @@ export interface ModelsCommandDependencies extends SharedRemediationDependencies
 interface ModelsReport {
   runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
-  resolvedConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
+  readinessConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
 }
 
@@ -94,7 +94,7 @@ export async function collectModelsReport(
     dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
     dependencies.getSearchStatus ?? getFeynmanSearchStatus;
-  const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
+  const loadConfig = dependencies.loadConfig ?? loadRevisionSetupReadiness;
   const loadParsedConfig =
     dependencies.loadParsedConfig ?? loadParsedUraniborgConfig;
   const runner = createSerializedFeynmanCommandRunner(
@@ -112,7 +112,7 @@ export async function collectModelsReport(
     includeReviewModels: true
   });
 
-  const [resolvedConfigResult, parsedConfigResult] = await Promise.all([
+  const [readinessConfigResult, parsedConfigResult] = await Promise.all([
     loadConfig(paths.configFile, dependencies.environment, undefined),
     loadParsedConfig(paths.configFile)
   ]);
@@ -120,7 +120,7 @@ export async function collectModelsReport(
   return {
     runtimeStatus: snapshot.runtimeStatus,
     readinessReport: snapshot.readinessReport,
-    resolvedConfigResult,
+    readinessConfigResult,
     parsedConfigResult
   };
 }
@@ -155,22 +155,18 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
 
   lines.push("", "Revision");
 
-  if (report.resolvedConfigResult.ok) {
+  if (report.readinessConfigResult.ok) {
     lines.push(
       `[ok] Revision setup is ready.`
     );
-    lines.push(
-      `Endpoint: ${report.resolvedConfigResult.value.refine.endpoint.baseUrl}`
-    );
-    lines.push(
-      `Default model: ${report.resolvedConfigResult.value.refine.defaults.model}`
-    );
+    lines.push(`Active profile: ${getRevisionProfileLabel(report.readinessConfigResult.value.revision.profile.id)}`);
+    lines.push(`Default model: ${report.readinessConfigResult.value.revision.defaults.model}`);
   } else if (report.parsedConfigResult.ok) {
-    lines.push(`[fail] ${report.resolvedConfigResult.error.message}`);
-    lines.push(`Endpoint: ${report.parsedConfigResult.value.refine.endpoint.baseUrl}`);
-    lines.push(`Default model: ${report.parsedConfigResult.value.refine.defaults.model}`);
+    lines.push(`[fail] ${report.readinessConfigResult.error.message}`);
+    lines.push(`Active profile: ${getRevisionProfileLabel(report.parsedConfigResult.value.revision.profile.id)}`);
+    lines.push(`Default model: ${report.parsedConfigResult.value.revision.defaults.model}`);
 
-    for (const detail of report.resolvedConfigResult.error.details ?? []) {
+    for (const detail of report.readinessConfigResult.error.details ?? []) {
       lines.push(`  ${detail}`);
     }
   } else {

@@ -9,6 +9,7 @@ import {
 } from "../../src/review/index.js";
 import { ok } from "../../src/types/result.js";
 import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
+import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("promptAndRunRemediations", () => {
   it("launches the dedicated web-search command after provider selection", async () => {
@@ -139,20 +140,17 @@ describe("runDoctorCommand", () => {
         });
       },
       async loadConfig() {
-        return ok({
-          version: 1,
-          refine: {
-            endpoint: {
-              baseUrl: "https://api.example.com/v1",
-              apiKey: "secret",
-              timeoutMs: 60000
+        return ok(
+          createTestUraniborgConfig({
+            profileId: "manual-openai-compatible",
+            credentialBinding: {
+              type: "stored-secret",
+              apiKey: "secret"
             },
-            defaults: {
-              model: "gpt-5.4",
-              temperature: 0.2
-            }
-          }
-        });
+            model: "gpt-5.4",
+            baseUrl: "https://api.example.com/v1"
+          })
+        );
       },
       prompts: {
         async confirm(options) {

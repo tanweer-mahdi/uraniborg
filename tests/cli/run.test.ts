@@ -17,6 +17,7 @@ import type {
   FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 import { ok } from "../../src/types/result.js";
+import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runRunCommand", () => {
   const temporaryRoots: string[] = [];
@@ -77,21 +78,7 @@ describe("runRunCommand", () => {
           };
         },
         async loadConfig() {
-          return ok({
-            version: 1,
-            refine: {
-              endpoint: {
-                baseUrl: "https://api.example.com/v1",
-                apiKeyEnvVar: "OPENAI_API_KEY",
-                apiKey: "secret",
-                timeoutMs: 60000
-              },
-              defaults: {
-                model: "gpt-5.4",
-                temperature: 0.2
-              }
-            }
-          });
+          return ok(createResolvedConfig());
         },
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
@@ -305,21 +292,7 @@ Reason: Unsupported by available material
             };
           },
           async loadConfig() {
-            return ok({
-              version: 1,
-              refine: {
-                endpoint: {
-                  baseUrl: "https://api.example.com/v1",
-                  apiKeyEnvVar: "OPENAI_API_KEY",
-                  apiKey: "secret",
-                  timeoutMs: 60000
-                },
-                defaults: {
-                  model: "gpt-5.4",
-                  temperature: 0.2
-                }
-              }
-            });
+            return ok(createResolvedConfig());
           },
           async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return {
@@ -867,21 +840,16 @@ function createPaths(homeDirectory: string) {
 }
 
 function createResolvedConfig() {
-  return {
-    version: 1 as const,
-    refine: {
-      endpoint: {
-        baseUrl: "https://api.example.com/v1",
-        apiKeyEnvVar: "OPENAI_API_KEY",
-        apiKey: "secret",
-        timeoutMs: 60000
-      },
-      defaults: {
-        model: "gpt-5.4",
-        temperature: 0.2
-      }
-    }
-  };
+  return createResolvedTestUraniborgConfig({
+    profileId: "manual-openai-compatible",
+    binding: {
+      type: "env-var",
+      envVar: "OPENAI_API_KEY",
+      resolvedApiKey: "secret"
+    },
+    model: "gpt-5.4",
+    baseUrl: "https://api.example.com/v1"
+  });
 }
 
 function createInteractivePrompts(

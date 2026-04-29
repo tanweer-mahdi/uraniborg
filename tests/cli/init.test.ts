@@ -6,6 +6,7 @@ import {
 } from "../../src/cli/commands/init.js";
 import { err, ok } from "../../src/types/result.js";
 import type { UraniborgConfig } from "../../src/types/app-config.js";
+import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runInitCommand", () => {
   it("prompts only for base URL, API key, and model on first run", async () => {
@@ -57,7 +58,7 @@ describe("runInitCommand", () => {
       },
       prompts: createPromptHarness(
         {
-          selectAnswers: ["manual"],
+          selectAnswers: ["manual-openai-compatible", "prompt-secret"],
           textAnswers: [
             "https://api.example.com/v1",
             "secret-key",
@@ -69,25 +70,23 @@ describe("runInitCommand", () => {
     });
 
     expect(promptsAsked).toEqual([
-      "Which revision provider should Uraniborg use?",
+      "Which revision provider profile should Uraniborg use?",
+      "How should Uraniborg read the revision API key?",
       "OpenAI-compatible revision endpoint URL",
       "Revision API key",
       "Default revision model"
     ]);
-    expect(savedConfig).toEqual({
-      version: 1,
-      refine: {
-        endpoint: {
-          baseUrl: "https://api.example.com/v1",
-          apiKey: "secret-key",
-          timeoutMs: 60000
+    expect(savedConfig).toEqual(
+      createTestUraniborgConfig({
+        profileId: "manual-openai-compatible",
+        credentialBinding: {
+          type: "stored-secret",
+          apiKey: "secret-key"
         },
-        defaults: {
-          model: "gpt-5.4",
-          temperature: 0.2
-        }
-      }
-    });
+        model: "gpt-5.4",
+        baseUrl: "https://api.example.com/v1"
+      })
+    );
   });
 
   it("preserves hidden advanced settings from an existing config", async () => {
@@ -128,28 +127,27 @@ describe("runInitCommand", () => {
         };
       },
       async loadConfig() {
-        return ok({
-          version: 1,
-          refine: {
-            endpoint: {
-              baseUrl: "https://legacy.example.com/v1",
-              apiKeyEnvVar: "OPENAI_API_KEY",
-              timeoutMs: 45000
+        return ok(
+          createTestUraniborgConfig({
+            profileId: "manual-openai-compatible",
+            credentialBinding: {
+              type: "env-var",
+              envVar: "OPENAI_API_KEY"
             },
-            defaults: {
-              model: "gpt-4.1",
-              temperature: 0.7,
-              maxOutputTokens: 2000
-            }
-          }
-        });
+            model: "gpt-4.1",
+            temperature: 0.7,
+            maxOutputTokens: 2000,
+            timeoutMs: 45000,
+            baseUrl: "https://legacy.example.com/v1"
+          })
+        );
       },
       async saveConfig(_configFilePath, config) {
         savedConfig = config;
       },
       prompts: createPromptHarness(
         {
-          selectAnswers: ["manual"],
+          selectAnswers: ["manual-openai-compatible", "prompt-secret"],
           textAnswers: [
             "https://api.example.com/v1",
             "secret-key",
@@ -160,21 +158,98 @@ describe("runInitCommand", () => {
       )
     });
 
-    expect(savedConfig).toEqual({
-      version: 1,
-      refine: {
-        endpoint: {
-          baseUrl: "https://api.example.com/v1",
-          apiKey: "secret-key",
-          timeoutMs: 45000
+    expect(savedConfig).toEqual(
+      createTestUraniborgConfig({
+        profileId: "manual-openai-compatible",
+        credentialBinding: {
+          type: "stored-secret",
+          apiKey: "secret-key"
         },
-        defaults: {
-          model: "gpt-5.4",
-          temperature: 0.7,
-          maxOutputTokens: 2000
+        model: "gpt-5.4",
+        temperature: 0.7,
+        maxOutputTokens: 2000,
+        timeoutMs: 45000,
+        baseUrl: "https://api.example.com/v1"
+      })
+    );
+  });
+
+  it("runs Pi-managed Claude browser login during init", async () => {
+    let savedConfig: UraniborgConfig | undefined;
+
+    await runInitCommand({
+      resolvePaths() {
+        return {
+          homeDirectory: "/tmp/alice",
+          appHomeDirectory: "/tmp/alice/.uraniborg",
+          configFile: "/tmp/alice/.uraniborg/config.json",
+          vendorDirectory: "/tmp/alice/.uraniborg/vendor",
+          feynmanRuntimeDirectory: "/tmp/alice/.uraniborg/vendor/feynman",
+          feynmanRuntimeManifestFile: "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
+          runsDirectory: "/tmp/alice/.uraniborg/runs"
+        };
+      },
+      async ensureAppHome(paths) {
+        return {
+          paths,
+          appHome: {
+            kind: "directory",
+            path: paths.appHomeDirectory
+          },
+          vendor: {
+            kind: "directory",
+            path: paths.vendorDirectory
+          },
+          feynmanRuntime: {
+            kind: "directory",
+            path: paths.feynmanRuntimeDirectory
+          },
+          runs: {
+            kind: "directory",
+            path: paths.runsDirectory
+          },
+          isLayoutValid: true
+        };
+      },
+      async loadConfig() {
+        return err({
+          code: "config_not_found",
+          message: "missing"
+        });
+      },
+      async saveConfig(_configFilePath, config) {
+        savedConfig = config;
+      },
+      authClient: {
+        async loginManagedCredential(providerId) {
+          expect(providerId).toBe("anthropic");
+          return {
+            providerId: "anthropic"
+          };
+        },
+        async resolveManagedCredential() {
+          throw new Error("Managed credential resolution should not run in this test.");
         }
-      }
+      },
+      prompts: createPromptHarness(
+        {
+          selectAnswers: ["claude-browser"],
+          textAnswers: ["claude-sonnet-4-5"]
+        },
+        []
+      )
     });
+
+    expect(savedConfig).toEqual(
+      createTestUraniborgConfig({
+        profileId: "claude-browser",
+        credentialBinding: {
+          type: "pi-auth-storage",
+          providerId: "anthropic"
+        },
+        model: "claude-sonnet-4-5"
+      })
+    );
   });
 });
 

@@ -8,13 +8,19 @@ export {
   type UraniborgAppHomeStatus
 } from "./app-home.js";
 export {
-  createNodeConfigReadWriter,
   loadParsedUraniborgConfig,
+  loadRevisionSetupReadiness,
+  loadSetupSeedUraniborgConfig,
   loadUraniborgConfig,
   parseUraniborgConfig,
-  resolveUraniborgConfigSecrets,
   saveUraniborgConfig
 } from "./app-config.js";
+export {
+  createNodeRevisionBrowserLauncher,
+  createRevisionAuthClient,
+  type RevisionAuthClient,
+  type RevisionBrowserLauncher
+} from "./revision-auth.js";
 export {
   isMarkdownFilePath,
   resolveIterationDirectory,

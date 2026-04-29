@@ -3,11 +3,11 @@ import type { Command } from "commander";
 import {
   ensureUraniborgAppHome,
   loadParsedUraniborgConfig,
-  loadUraniborgConfig,
+  loadRevisionSetupReadiness,
   resolveUraniborgPaths
 } from "../../config/index.js";
+import { getRevisionProfileLabel } from "../../config/revision-profiles.js";
 import type {
-  ResolvedUraniborgConfig,
   UraniborgConfig,
   UraniborgConfigLoadError
 } from "../../types/app-config.js";
@@ -24,7 +24,7 @@ export interface RevisionCommandOptions {
 }
 
 export interface RevisionCommandDependencies extends RevisionSetupDependencies {
-  loadResolvedConfig?: typeof loadUraniborgConfig;
+  loadRevisionReadiness?: typeof loadRevisionSetupReadiness;
   loadParsedConfig?: typeof loadParsedUraniborgConfig;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
@@ -32,7 +32,7 @@ export interface RevisionCommandDependencies extends RevisionSetupDependencies {
 
 interface RevisionConfigReport {
   configFilePath: string;
-  resolvedConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
+  readinessResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
 }
 
@@ -81,22 +81,22 @@ async function collectRevisionConfigReport(
 ): Promise<RevisionConfigReport> {
   const resolvePaths = dependencies.resolvePaths ?? resolveUraniborgPaths;
   const ensureAppHome = dependencies.ensureAppHome ?? ensureUraniborgAppHome;
-  const loadResolvedConfig =
-    dependencies.loadResolvedConfig ?? loadUraniborgConfig;
+  const loadRevisionReadiness =
+    dependencies.loadRevisionReadiness ?? loadRevisionSetupReadiness;
   const loadParsedConfig =
     dependencies.loadParsedConfig ?? loadParsedUraniborgConfig;
 
   const paths = resolvePaths();
   await ensureAppHome(paths);
 
-  const [resolvedConfigResult, parsedConfigResult] = await Promise.all([
-    loadResolvedConfig(paths.configFile, dependencies.environment),
+  const [readinessResult, parsedConfigResult] = await Promise.all([
+    loadRevisionReadiness(paths.configFile, dependencies.environment),
     loadParsedConfig(paths.configFile)
   ]);
 
   return {
     configFilePath: paths.configFile,
-    resolvedConfigResult,
+    readinessResult,
     parsedConfigResult
   };
 }
@@ -106,16 +106,11 @@ function renderRevisionConfigReport(
 ): readonly string[] {
   const lines: string[] = ["Revision Configuration"];
 
-  if (report.resolvedConfigResult.ok) {
+  if (report.readinessResult.ok) {
     lines.push("[ok] Revision setup is ready.");
     lines.push(`Config: ${report.configFilePath}`);
-    lines.push(
-      `Endpoint: ${report.resolvedConfigResult.value.refine.endpoint.baseUrl}`
-    );
-    lines.push(
-      `Default model: ${report.resolvedConfigResult.value.refine.defaults.model}`
-    );
-    lines.push("API key: stored in Uraniborg config (redacted)");
+    lines.push(formatActiveProfileLine(report.readinessResult.value));
+    lines.push(formatDefaultModelLine(report.readinessResult.value));
 
     return lines;
   }
@@ -123,16 +118,11 @@ function renderRevisionConfigReport(
   if (report.parsedConfigResult.ok) {
     lines.push("[fail] Revision setup is incomplete.");
     lines.push(`Config: ${report.configFilePath}`);
-    lines.push(
-      `Endpoint: ${report.parsedConfigResult.value.refine.endpoint.baseUrl}`
-    );
-    lines.push(
-      `Default model: ${report.parsedConfigResult.value.refine.defaults.model}`
-    );
-    lines.push(formatApiKeyStatus(report.parsedConfigResult.value));
-    lines.push(`  ${report.resolvedConfigResult.error.message}`);
+    lines.push(formatActiveProfileLine(report.parsedConfigResult.value));
+    lines.push(formatDefaultModelLine(report.parsedConfigResult.value));
+    lines.push(`  ${report.readinessResult.error.message}`);
 
-    for (const detail of report.resolvedConfigResult.error.details ?? []) {
+    for (const detail of report.readinessResult.error.details ?? []) {
       lines.push(`  ${detail}`);
     }
 
@@ -158,14 +148,14 @@ function renderRevisionConfigReport(
   return lines;
 }
 
-function formatApiKeyStatus(config: UraniborgConfig): string {
-  if (typeof config.refine.endpoint.apiKey === "string") {
-    return "API key: stored in Uraniborg config (redacted)";
-  }
+function formatActiveProfileLine(
+  config: Pick<UraniborgConfig, "revision">
+): string {
+  return `Active profile: ${getRevisionProfileLabel(config.revision.profile.id)}`;
+}
 
-  if (typeof config.refine.endpoint.apiKeyEnvVar === "string") {
-    return `API key: sourced from environment variable "${config.refine.endpoint.apiKeyEnvVar}"`;
-  }
-
-  return "API key: not configured";
+function formatDefaultModelLine(
+  config: Pick<UraniborgConfig, "revision">
+): string {
+  return `Default model: ${config.revision.defaults.model}`;
 }

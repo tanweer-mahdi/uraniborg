@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { runModelsCommand } from "../../src/cli/commands/models.js";
-import { ok } from "../../src/types/result.js";
+import { err, ok } from "../../src/types/result.js";
 import type {
   FeynmanCommandExecution,
   FeynmanRuntimeStatus
 } from "../../src/review/index.js";
+import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runModelsCommand", () => {
   it("shows review model remediation guidance and configured revision defaults", async () => {
@@ -49,35 +50,34 @@ describe("runModelsCommand", () => {
         });
       },
       async loadConfig() {
-        return ok({
-          version: 1,
-          refine: {
-            endpoint: {
-              baseUrl: "https://api.example.com/v1",
-              apiKey: "secret",
-              timeoutMs: 60000
+        return ok(
+          createTestUraniborgConfig({
+            profileId: "openai-codex-chatgpt",
+            credentialBinding: {
+              type: "pi-auth-storage",
+              providerId: "openai-codex"
             },
-            defaults: {
-              model: "gpt-5",
-              temperature: 0.2
+            model: "gpt-5",
+            providerContext: {
+              accountId: "acct_test"
             }
-          }
-        });
+          })
+        );
       },
       async loadParsedConfig() {
-        return ok({
-          version: 1,
-          refine: {
-            endpoint: {
-              baseUrl: "https://api.example.com/v1",
-              timeoutMs: 60000
+        return ok(
+          createTestUraniborgConfig({
+            profileId: "openai-codex-chatgpt",
+            credentialBinding: {
+              type: "pi-auth-storage",
+              providerId: "openai-codex"
             },
-            defaults: {
-              model: "gpt-5",
-              temperature: 0.2
+            model: "gpt-5",
+            providerContext: {
+              accountId: "acct_test"
             }
-          }
-        });
+          })
+        );
       },
       writeLine(message) {
         lines.push(message);
@@ -88,7 +88,7 @@ describe("runModelsCommand", () => {
       "[fail] Review model discovery is not ready through the selected Feynman runtime."
     );
     expect(lines).toContain("[ok] Revision setup is ready.");
-    expect(lines).toContain("Endpoint: https://api.example.com/v1");
+    expect(lines).toContain("Active profile: OpenAI/Codex");
     expect(lines).toContain("Default model: gpt-5");
     expect(lines.some((line) => line.includes("Recommended Capabilities"))).toBe(
       false
@@ -98,6 +98,72 @@ describe("runModelsCommand", () => {
     expect(lines.some((line) => line.includes("Exit code:"))).toBe(false);
     expect(lines.some((line) => line.includes("stdout:"))).toBe(false);
     expect(lines.some((line) => line.includes("stderr:"))).toBe(false);
+  });
+
+  it("surfaces incomplete Gemini browser-login setup without exposing Pi internals", async () => {
+    const lines: string[] = [];
+
+    await runModelsCommand({
+      interactive: false,
+      resolvePaths() {
+        return {
+          homeDirectory: "/tmp/alice",
+          appHomeDirectory: "/tmp/alice/.uraniborg",
+          configFile: "/tmp/alice/.uraniborg/config.json",
+          vendorDirectory: "/tmp/alice/.uraniborg/vendor",
+          feynmanRuntimeDirectory: "/tmp/alice/.uraniborg/vendor/feynman",
+          feynmanRuntimeManifestFile:
+            "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
+          runsDirectory: "/tmp/alice/.uraniborg/runs"
+        };
+      },
+      async inspectRuntime() {
+        return createReadyRuntimeStatus();
+      },
+      async listModels() {
+        return createExecution({
+          args: ["model", "list"],
+          stdout: JSON.stringify(["openai/gpt-5.4"])
+        });
+      },
+      async getAlphaStatus() {
+        return createExecution({
+          args: ["alpha", "status"],
+          stdout: "AlphaXiv ready"
+        });
+      },
+      async getSearchStatus() {
+        return createExecution({
+          args: ["search", "status"],
+          stdout: "Web search ready"
+        });
+      },
+      async loadConfig() {
+        return err({
+          code: "provider_context_missing",
+          message: 'Revision provider context "projectId" is missing for "Gemini".'
+        });
+      },
+      async loadParsedConfig() {
+        return ok(
+          createTestUraniborgConfig({
+            profileId: "gemini-cloud-code-assist",
+            credentialBinding: {
+              type: "pi-auth-storage",
+              providerId: "google-gemini-cli"
+            },
+            model: "gemini-2.5-pro"
+          })
+        );
+      },
+      writeLine(message) {
+        lines.push(message);
+      }
+    });
+
+    expect(lines).toContain('[fail] Revision provider context "projectId" is missing for "Gemini".');
+    expect(lines).toContain("Active profile: Gemini");
+    expect(lines.some((line) => line.includes("google-gemini-cli"))).toBe(false);
   });
 });
 

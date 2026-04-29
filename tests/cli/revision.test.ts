@@ -8,6 +8,7 @@ import type { RevisionSetupDependencies } from "../../src/cli/commands/revision-
 import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
 import { err, ok } from "../../src/types/result.js";
 import type { UraniborgConfig } from "../../src/types/app-config.js";
+import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runRevisionCommand", () => {
   it("runs the guided revision setup flow through `revision --setup`", async () => {
@@ -34,9 +35,17 @@ describe("runRevisionCommand", () => {
         async saveConfig(_configFilePath, config) {
           savedConfig = config;
         },
+        authClient: {
+          async loginManagedCredential() {
+            throw new Error("Pi-managed browser login should not run in this test.");
+          },
+          async resolveManagedCredential() {
+            throw new Error("Managed credential resolution should not run in this test.");
+          }
+        },
         prompts: createPromptHarness(
           {
-            selectAnswers: ["manual"],
+            selectAnswers: ["manual-openai-compatible", "prompt-secret"],
             textAnswers: ["https://api.example.com/v1", "secret-key", "gpt-5.4"]
           },
           promptsAsked
@@ -45,29 +54,84 @@ describe("runRevisionCommand", () => {
     );
 
     expect(promptsAsked).toEqual([
-      "Which revision provider should Uraniborg use?",
+      "Which revision provider profile should Uraniborg use?",
+      "How should Uraniborg read the revision API key?",
       "OpenAI-compatible revision endpoint URL",
       "Revision API key",
       "Default revision model"
     ]);
-    expect(savedConfig).toEqual({
-      version: 1,
-      refine: {
-        endpoint: {
-          baseUrl: "https://api.example.com/v1",
-          apiKey: "secret-key",
-          timeoutMs: 60000
+    expect(savedConfig).toEqual(
+      createTestUraniborgConfig({
+        profileId: "manual-openai-compatible",
+        credentialBinding: {
+          type: "stored-secret",
+          apiKey: "secret-key"
         },
-        defaults: {
-          model: "gpt-5.4",
-          temperature: 0.2
-        }
-      }
-    });
+        model: "gpt-5.4",
+        baseUrl: "https://api.example.com/v1"
+      })
+    );
   });
 
-  it("uses the built-in endpoint when ChatGPT is selected", async () => {
+  it("uses Pi-backed browser login when OpenAI/Codex is selected", async () => {
     const promptsAsked: string[] = [];
+    let savedConfig: UraniborgConfig | undefined;
+    let loginAttempts = 0;
+
+    await runRevisionCommand(
+      {
+        setup: true
+      },
+      {
+        resolvePaths() {
+          return createPaths();
+        },
+        async ensureAppHome(paths) {
+          return createAppHomeStatus(paths);
+        },
+        async loadConfig() {
+          return err({
+            code: "config_not_found",
+            message: "missing"
+          });
+        },
+        async saveConfig(_configFilePath, config) {
+          savedConfig = config;
+        },
+        authClient: {
+          async loginManagedCredential(providerId) {
+            loginAttempts += 1;
+            expect(providerId).toBe("openai-codex");
+            return {
+              providerId: "openai-codex",
+              accountId: "acct_test"
+            };
+          },
+          async resolveManagedCredential() {
+            throw new Error("Managed credential resolution should not run in this test.");
+          }
+        },
+        prompts: createPromptHarness(
+          {
+            selectAnswers: ["openai-codex-chatgpt"],
+            textAnswers: ["gpt-5.4"]
+          },
+          promptsAsked
+        )
+      }
+    );
+
+    expect(promptsAsked).toEqual([
+      "Which revision provider profile should Uraniborg use?",
+      "Default revision model"
+    ]);
+    expect(loginAttempts).toBe(1);
+    expect(savedConfig?.refine.endpoint.baseUrl).toBe(
+      "https://chatgpt.com/backend-api"
+    );
+  });
+
+  it("uses Pi-backed browser login when Claude is selected", async () => {
     let savedConfig: UraniborgConfig | undefined;
 
     await runRevisionCommand(
@@ -90,24 +154,88 @@ describe("runRevisionCommand", () => {
         async saveConfig(_configFilePath, config) {
           savedConfig = config;
         },
+        authClient: {
+          async loginManagedCredential(providerId) {
+            expect(providerId).toBe("anthropic");
+            return {
+              providerId: "anthropic"
+            };
+          },
+          async resolveManagedCredential() {
+            throw new Error("Managed credential resolution should not run in this test.");
+          }
+        },
         prompts: createPromptHarness(
           {
-            selectAnswers: ["chatgpt"],
-            textAnswers: ["secret-key", "gpt-5.4"]
+            selectAnswers: ["claude-browser"],
+            textAnswers: ["claude-sonnet-4-5"]
           },
-          promptsAsked
+          []
         )
       }
     );
 
-    expect(promptsAsked).toEqual([
-      "Which revision provider should Uraniborg use?",
-      "Revision API key",
-      "Default revision model"
-    ]);
-    expect(savedConfig?.refine.endpoint.baseUrl).toBe(
-      "https://api.openai.com/v1"
+    expect(savedConfig).toEqual(
+      createTestUraniborgConfig({
+        profileId: "claude-browser",
+        credentialBinding: {
+          type: "pi-auth-storage",
+          providerId: "anthropic"
+        },
+        model: "claude-sonnet-4-5"
+      })
     );
+  });
+
+  it("does not write config when Gemini browser login lacks project context", async () => {
+    let savedConfig: UraniborgConfig | undefined;
+
+    await expect(
+      runRevisionCommand(
+        {
+          setup: true
+        },
+        {
+          resolvePaths() {
+            return createPaths();
+          },
+          async ensureAppHome(paths) {
+            return createAppHomeStatus(paths);
+          },
+          async loadConfig() {
+            return err({
+              code: "config_not_found",
+              message: "missing"
+            });
+          },
+          async saveConfig(_configFilePath, config) {
+            savedConfig = config;
+          },
+          authClient: {
+            async loginManagedCredential(providerId) {
+              expect(providerId).toBe("google-gemini-cli");
+              return {
+                providerId: "google-gemini-cli"
+              };
+            },
+            async resolveManagedCredential() {
+              throw new Error("Managed credential resolution should not run in this test.");
+            }
+          },
+          prompts: createPromptHarness(
+            {
+              selectAnswers: ["gemini-cloud-code-assist"],
+              textAnswers: []
+            },
+            []
+          )
+        }
+      )
+    ).rejects.toThrow(
+      'Pi login for "google-gemini-cli" did not produce the required provider context "projectId".'
+    );
+
+    expect(savedConfig).toBeUndefined();
   });
 
   it("requires exactly one revision command mode", async () => {
@@ -124,6 +252,52 @@ describe("runRevisionCommand", () => {
       "Choose exactly one of `--setup` or `--config` when running `uraniborg revision`."
     );
   });
+
+  it("does not write config when OpenAI/Codex browser login fails", async () => {
+    let savedConfig: UraniborgConfig | undefined;
+
+    await expect(
+      runRevisionCommand(
+        {
+          setup: true
+        },
+        {
+          resolvePaths() {
+            return createPaths();
+          },
+          async ensureAppHome(paths) {
+            return createAppHomeStatus(paths);
+          },
+          async loadConfig() {
+            return err({
+              code: "config_not_found",
+              message: "missing"
+            });
+          },
+        async saveConfig(_configFilePath, config) {
+          savedConfig = config;
+        },
+        authClient: {
+            async loginManagedCredential() {
+              throw new Error("Browser login failed.");
+            },
+            async resolveManagedCredential() {
+              throw new Error("Managed credential resolution should not run in this test.");
+            }
+          },
+          prompts: createPromptHarness(
+            {
+              selectAnswers: ["openai-codex-chatgpt"],
+              textAnswers: []
+            },
+            []
+          )
+        }
+      )
+    ).rejects.toThrow("Browser login failed.");
+
+    expect(savedConfig).toBeUndefined();
+  });
 });
 
 describe("runRevisionConfigCommand", () => {
@@ -137,37 +311,35 @@ describe("runRevisionConfigCommand", () => {
       async ensureAppHome(paths) {
         return createAppHomeStatus(paths);
       },
-      async loadResolvedConfig() {
-        return ok({
-          version: 1,
-          refine: {
-            endpoint: {
-              baseUrl: "https://api.example.com/v1",
-              apiKey: "super-secret",
-              timeoutMs: 60000
+      async loadRevisionReadiness() {
+        return ok(
+          createTestUraniborgConfig({
+            profileId: "openai-codex-chatgpt",
+            credentialBinding: {
+              type: "pi-auth-storage",
+              providerId: "openai-codex"
             },
-            defaults: {
-              model: "gpt-5.4",
-              temperature: 0.2
+            model: "gpt-5.4",
+            providerContext: {
+              accountId: "acct_test"
             }
-          }
-        });
+          })
+        );
       },
       async loadParsedConfig() {
-        return ok({
-          version: 1,
-          refine: {
-            endpoint: {
-              baseUrl: "https://api.example.com/v1",
-              apiKey: "super-secret",
-              timeoutMs: 60000
+        return ok(
+          createTestUraniborgConfig({
+            profileId: "openai-codex-chatgpt",
+            credentialBinding: {
+              type: "pi-auth-storage",
+              providerId: "openai-codex"
             },
-            defaults: {
-              model: "gpt-5.4",
-              temperature: 0.2
+            model: "gpt-5.4",
+            providerContext: {
+              accountId: "acct_test"
             }
-          }
-        });
+          })
+        );
       },
       writeLine(message) {
         lines.push(message);
@@ -175,9 +347,8 @@ describe("runRevisionConfigCommand", () => {
     });
 
     expect(lines).toContain("[ok] Revision setup is ready.");
-    expect(lines).toContain("Endpoint: https://api.example.com/v1");
+    expect(lines).toContain("Active profile: OpenAI/Codex");
     expect(lines).toContain("Default model: gpt-5.4");
-    expect(lines).toContain("API key: stored in Uraniborg config (redacted)");
     expect(lines.some((line) => line.includes("super-secret"))).toBe(false);
   });
 
@@ -191,7 +362,7 @@ describe("runRevisionConfigCommand", () => {
       async ensureAppHome(paths) {
         return createAppHomeStatus(paths);
       },
-      async loadResolvedConfig() {
+      async loadRevisionReadiness() {
         return err({
           code: "config_not_found",
           message: "Uraniborg config was not found at \"/tmp/alice/.uraniborg/config.json\"."

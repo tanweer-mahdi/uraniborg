@@ -9,6 +9,7 @@ import {
 } from "../../src/run/manifest.js";
 import { transitionRunManifest } from "../../src/run/state-machine.js";
 import type { RunFilesystem } from "../../src/run/artifact-store.js";
+import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("run manifest", () => {
   it("creates the initial initialized manifest shape", () => {
@@ -77,21 +78,16 @@ describe("run manifest", () => {
 
   it("creates config snapshots without storing resolved secrets", () => {
     const snapshot = createRunConfigSnapshot({
-      config: {
-        version: 1,
-        refine: {
-          endpoint: {
-            baseUrl: "https://api.example.com/v1",
-            apiKeyEnvVar: "OPENAI_API_KEY",
-            apiKey: "secret",
-            timeoutMs: 60000
-          },
-          defaults: {
-            model: "gpt-5",
-            temperature: 0.2
-          }
-        }
-      },
+      config: createResolvedTestUraniborgConfig({
+        profileId: "manual-openai-compatible",
+        binding: {
+          type: "env-var",
+          envVar: "OPENAI_API_KEY",
+          resolvedApiKey: "secret"
+        },
+        model: "gpt-5",
+        baseUrl: "https://api.example.com/v1"
+      }),
       sourcePath: "/work/draft.md",
       title: "Draft",
       slug: "draft",

@@ -9,6 +9,7 @@ import {
   type RefineHttpClient
 } from "../../src/refine/refinement.js";
 import type { ResolvedUraniborgConfig } from "../../src/types/app-config.js";
+import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("refinement prompt assembly", () => {
   it("assembles the Uraniborg-owned system prompt and user payload", () => {
@@ -276,20 +277,17 @@ describe("refinement execution", () => {
 });
 
 function createResolvedConfig(): ResolvedUraniborgConfig {
-  return {
-    version: 1,
-    refine: {
-      endpoint: {
-        baseUrl: "https://example.com/v1",
-        apiKeyEnvVar: "OPENAI_API_KEY",
-        apiKey: "secret",
-        timeoutMs: 30_000
-      },
-      defaults: {
-        model: "gpt-5.4",
-        temperature: 0.2,
-        maxOutputTokens: 1200
-      }
-    }
-  };
+  return createResolvedTestUraniborgConfig({
+    profileId: "manual-openai-compatible",
+    binding: {
+      type: "env-var",
+      envVar: "OPENAI_API_KEY",
+      resolvedApiKey: "secret"
+    },
+    model: "gpt-5.4",
+    temperature: 0.2,
+    maxOutputTokens: 1200,
+    timeoutMs: 30_000,
+    baseUrl: "https://example.com/v1"
+  });
 }

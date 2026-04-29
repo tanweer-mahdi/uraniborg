@@ -2,9 +2,10 @@ import type { Command } from "commander";
 
 import {
   ensureUraniborgAppHome,
-  loadUraniborgConfig,
+  loadRevisionSetupReadiness,
   resolveUraniborgPaths
 } from "../../config/index.js";
+import { getRevisionProfileLabel } from "../../config/revision-profiles.js";
 import {
   collectFeynmanRuntimeSnapshot,
   createSearchConfigurationRemediationAction,
@@ -20,7 +21,7 @@ import {
 } from "../../review/index.js";
 import type { Result } from "../../types/result.js";
 import type {
-  ResolvedUraniborgConfig,
+  UraniborgConfig,
   UraniborgConfigLoadError
 } from "../../types/app-config.js";
 import type { UraniborgAppHomeStatus } from "../../config/index.js";
@@ -46,7 +47,7 @@ export interface DoctorCommandDependencies extends SharedRemediationDependencies
   listModels?: typeof listFeynmanModels;
   getAlphaStatus?: typeof getFeynmanAlphaStatus;
   getSearchStatus?: typeof getFeynmanSearchStatus;
-  loadConfig?: typeof loadUraniborgConfig;
+  loadConfig?: typeof loadRevisionSetupReadiness;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
   runner?: FeynmanCommandRunner;
@@ -56,7 +57,7 @@ interface DoctorReport {
   appHomeStatus: UraniborgAppHomeStatus;
   runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
-  refineConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
+  revisionConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
 }
 
 export async function runDoctorCommand(
@@ -120,7 +121,7 @@ export async function collectDoctorReport(
     dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
     dependencies.getSearchStatus ?? getFeynmanSearchStatus;
-  const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
+  const loadConfig = dependencies.loadConfig ?? loadRevisionSetupReadiness;
   const runner = createSerializedFeynmanCommandRunner(
     dependencies.runner ?? createNodeFeynmanCommandRunner()
   );
@@ -138,7 +139,7 @@ export async function collectDoctorReport(
     includeCapabilities: true
   });
 
-  const refineConfigResult = await loadConfig(
+  const revisionConfigResult = await loadConfig(
     paths.configFile,
     dependencies.environment,
     undefined
@@ -148,7 +149,7 @@ export async function collectDoctorReport(
     appHomeStatus,
     runtimeStatus: snapshot.runtimeStatus,
     readinessReport: snapshot.readinessReport,
-    refineConfigResult
+    revisionConfigResult
   };
 }
 
@@ -179,20 +180,20 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
 
   lines.push("", "Revision Readiness");
 
-  if (report.refineConfigResult.ok) {
+  if (report.revisionConfigResult.ok) {
     lines.push(
       formatStatusLine(
         true,
-        `Revision setup is ready. Model: ${report.refineConfigResult.value.refine.defaults.model}. Endpoint: ${report.refineConfigResult.value.refine.endpoint.baseUrl}`,
+        `Revision setup is ready. Profile: ${getRevisionProfileLabel(report.revisionConfigResult.value.revision.profile.id)}. Model: ${report.revisionConfigResult.value.revision.defaults.model}.`,
         ""
       )
     );
   } else {
     lines.push(
-      formatStatusLine(false, "", report.refineConfigResult.error.message)
+      formatStatusLine(false, "", report.revisionConfigResult.error.message)
     );
 
-    for (const detail of report.refineConfigResult.error.details ?? []) {
+    for (const detail of report.revisionConfigResult.error.details ?? []) {
       lines.push(`  ${detail}`);
     }
   }
@@ -202,7 +203,7 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
   const blockingIssues =
     !report.appHomeStatus.isLayoutValid ||
     !report.readinessReport.requiredReady ||
-    !report.refineConfigResult.ok;
+    !report.revisionConfigResult.ok;
 
   if (blockingIssues) {
     lines.push("[fail] Uraniborg has blocking environment issues.");

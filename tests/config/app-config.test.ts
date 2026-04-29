@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   loadParsedUraniborgConfig,
+  loadSetupSeedUraniborgConfig,
   loadUraniborgConfig,
   parseUraniborgConfig,
+  resolveRevisionSetupReadiness,
   resolveUraniborgConfigSecrets,
   saveUraniborgConfig
 } from "../../src/config/app-config.js";
@@ -11,6 +13,11 @@ import type {
   UraniborgConfig,
   UraniborgConfigReadWriter
 } from "../../src/types/app-config.js";
+import {
+  createResolvedTestUraniborgConfig,
+  createTestUraniborgConfig
+} from "../helpers/uraniborg-config.js";
+import { ok } from "../../src/types/result.js";
 
 describe("parseUraniborgConfig", () => {
   it("accepts a valid refine configuration with a stored API key", () => {
@@ -70,24 +77,88 @@ describe("parseUraniborgConfig", () => {
       expect(result.error.code).toBe("config_invalid_schema");
     }
   });
-});
 
-describe("resolveUraniborgConfigSecrets", () => {
-  it("uses a stored API key directly", () => {
-    const config: UraniborgConfig = {
-      version: 1,
-      refine: {
+  it("classifies preview OpenAI/Codex version 2 config as stale", () => {
+    const result = parseUraniborgConfig({
+      version: 2,
+      revision: {
+        providerFamily: "openai-codex",
+        profileId: "openai-codex",
+        authClass: "api-key",
+        credentialSource: {
+          type: "env-var",
+          envVar: "OPENAI_API_KEY"
+        },
         endpoint: {
-          baseUrl: "https://api.example.com/v1",
-          apiKey: "stored-secret",
-          timeoutMs: 5000
+          timeoutMs: 60000
         },
         defaults: {
           model: "gpt-5",
           temperature: 0.2
         }
       }
-    };
+    });
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.code).toBe("config_stale_revision_setup");
+    }
+  });
+
+  it("classifies preview Claude version 2 config as stale", () => {
+    const result = parseUraniborgConfig({
+      version: 2,
+      revision: {
+        providerFamily: "claude",
+        profileId: "claude",
+        authClass: "api-key",
+        credentialSource: {
+          type: "env-var",
+          envVar: "ANTHROPIC_API_KEY"
+        },
+        endpoint: {
+          timeoutMs: 60000
+        },
+        defaults: {
+          model: "claude-sonnet-4-5",
+          temperature: 0.2
+        }
+      }
+    });
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.code).toBe("config_stale_revision_setup");
+      expect(result.error.message).toContain("Claude");
+    }
+  });
+
+  it("classifies current API-key-based Gemini config as stale", () => {
+    const result = parseUraniborgConfig(
+      createTestUraniborgConfig({
+        profileId: "gemini-direct",
+        credentialBinding: {
+          type: "env-var",
+          envVar: "GEMINI_API_KEY"
+        },
+        model: "gemini-2.5-pro"
+      })
+    );
+
+    expect(result.ok).toBe(false);
+
+    if (!result.ok) {
+      expect(result.error.code).toBe("config_stale_revision_setup");
+      expect(result.error.message).toContain("Gemini");
+    }
+  });
+});
+
+describe("resolveUraniborgConfigSecrets", () => {
+  it("uses a stored API key directly", () => {
+    const config = createStoredSecretConfig();
 
     const result = resolveUraniborgConfigSecrets(config, {});
 
@@ -99,20 +170,7 @@ describe("resolveUraniborgConfigSecrets", () => {
   });
 
   it("resolves the configured API key env var", () => {
-    const config: UraniborgConfig = {
-      version: 1,
-      refine: {
-        endpoint: {
-          baseUrl: "https://api.example.com/v1",
-          apiKeyEnvVar: "OPENAI_API_KEY",
-          timeoutMs: 5000
-        },
-        defaults: {
-          model: "gpt-5",
-          temperature: 0.2
-        }
-      }
-    };
+    const config = createEnvVarConfig();
 
     const result = resolveUraniborgConfigSecrets(config, {
       OPENAI_API_KEY: "secret-key"
@@ -126,20 +184,7 @@ describe("resolveUraniborgConfigSecrets", () => {
   });
 
   it("fails when the API key env var is missing", () => {
-    const config: UraniborgConfig = {
-      version: 1,
-      refine: {
-        endpoint: {
-          baseUrl: "https://api.example.com/v1",
-          apiKeyEnvVar: "OPENAI_API_KEY",
-          timeoutMs: 5000
-        },
-        defaults: {
-          model: "gpt-5",
-          temperature: 0.2
-        }
-      }
-    };
+    const config = createEnvVarConfig();
 
     const result = resolveUraniborgConfigSecrets(config, {});
 
@@ -284,43 +329,170 @@ describe("loadUraniborgConfig", () => {
 
     await saveUraniborgConfig(
       "/tmp/config.json",
-      {
-        version: 1,
-        refine: {
-          endpoint: {
-            baseUrl: "https://api.example.com/v1",
-            apiKey: "stored-secret",
-            timeoutMs: 1000
-          },
-          defaults: {
-            model: "gpt-5",
-            temperature: 0.2
-          }
-        }
-      },
+      createTestUraniborgConfig({
+        profileId: "manual-openai-compatible",
+        credentialBinding: {
+          type: "stored-secret",
+          apiKey: "stored-secret"
+        },
+        model: "gpt-5",
+        timeoutMs: 1000,
+        baseUrl: "https://api.openai.com/v1"
+      }),
       readWriter
     );
 
     expect(writes).toEqual([
       `${JSON.stringify(
         {
-          version: 1,
-          refine: {
-            endpoint: {
-              baseUrl: "https://api.example.com/v1",
-              apiKey: "stored-secret",
-              timeoutMs: 1000
+          version: 3,
+          revision: createTestUraniborgConfig({
+            profileId: "manual-openai-compatible",
+            credentialBinding: {
+              type: "stored-secret",
+              apiKey: "stored-secret"
             },
-            defaults: {
-              model: "gpt-5",
-              temperature: 0.2
-            }
-          }
+            model: "gpt-5",
+            timeoutMs: 1000,
+            baseUrl: "https://api.openai.com/v1"
+          }).revision
         },
         null,
         2
       )}\n`
     ]);
+  });
+
+  it("creates a version 3 setup seed from stale preview OpenAI/Codex config", async () => {
+    const result = await loadSetupSeedUraniborgConfig(
+      "/tmp/config.json",
+      createMemoryReadWriter(
+        JSON.stringify({
+          version: 2,
+          revision: {
+            providerFamily: "openai-codex",
+            profileId: "openai-codex",
+            authClass: "api-key",
+            credentialSource: {
+              type: "env-var",
+              envVar: "OPENAI_API_KEY"
+            },
+            endpoint: {
+              timeoutMs: 45000
+            },
+            defaults: {
+              model: "gpt-4.1",
+              temperature: 0.7
+            }
+          }
+        })
+      )
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.version).toBe(3);
+      expect(result.value.revision.profile.id).toBe("openai-codex-chatgpt");
+      expect(result.value.revision.auth.class).toBe("oauth");
+      expect(result.value.revision.auth.acquisition).toBe("browser-login");
+      expect(result.value.revision.defaults.model).toBe("gpt-4.1");
+      expect(result.value.revision.endpoint.timeoutMs).toBe(45000);
+    }
+  });
+
+  it("creates a setup seed from stale Claude config", async () => {
+    const result = await loadSetupSeedUraniborgConfig(
+      "/tmp/config.json",
+      createMemoryReadWriter(
+        JSON.stringify({
+          version: 3,
+          revision: createTestUraniborgConfig({
+            profileId: "claude-api",
+            credentialBinding: {
+              type: "env-var",
+              envVar: "ANTHROPIC_API_KEY"
+            },
+            model: "claude-sonnet-4-5"
+          }).revision
+        })
+      )
+    );
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.value.revision.profile.id).toBe("claude-browser");
+      expect(result.value.revision.auth.class).toBe("oauth");
+      expect(result.value.revision.credentialBinding).toEqual({
+        type: "pi-auth-storage",
+        providerId: "anthropic"
+      });
+    }
+  });
+
+  it("checks Gemini Pi-managed revision readiness with required project context", async () => {
+    const config = createTestUraniborgConfig({
+      profileId: "gemini-cloud-code-assist",
+      credentialBinding: {
+        type: "pi-auth-storage",
+        providerId: "google-gemini-cli"
+      },
+      model: "gemini-2.5-pro",
+      providerContext: {
+        projectId: "project-123"
+      }
+    });
+
+    const result = await resolveRevisionSetupReadiness(
+      config,
+      {},
+      {
+        async loginManagedCredential() {
+          throw new Error("Login should not run during readiness checks.");
+        },
+        async resolveManagedCredential() {
+          return ok({
+            providerId: "google-gemini-cli",
+            projectId: "project-123"
+          });
+        }
+      }
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("checks Pi-managed revision readiness separately from runtime execution", async () => {
+    const config = createTestUraniborgConfig({
+      profileId: "openai-codex-chatgpt",
+      credentialBinding: {
+        type: "pi-auth-storage",
+        providerId: "openai-codex"
+      },
+      model: "gpt-5.4",
+      providerContext: {
+        accountId: "acct_test"
+      }
+    });
+
+    const result = await resolveRevisionSetupReadiness(
+      config,
+      {},
+      {
+        async loginManagedCredential() {
+          throw new Error("Login should not run during readiness checks.");
+        },
+        async resolveManagedCredential() {
+          return ok({
+            providerId: "openai-codex",
+            accountId: "acct_test"
+          });
+        }
+      }
+    );
+
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -340,4 +512,30 @@ function createNodeError(
   const error = new Error(message) as NodeJS.ErrnoException;
   error.code = code;
   return error;
+}
+
+function createStoredSecretConfig(): UraniborgConfig {
+  return createTestUraniborgConfig({
+    profileId: "manual-openai-compatible",
+    credentialBinding: {
+      type: "stored-secret",
+      apiKey: "stored-secret"
+    },
+    model: "gpt-5",
+    timeoutMs: 5000,
+    baseUrl: "https://api.openai.com/v1"
+  });
+}
+
+function createEnvVarConfig(): UraniborgConfig {
+  return createTestUraniborgConfig({
+    profileId: "manual-openai-compatible",
+    credentialBinding: {
+      type: "env-var",
+      envVar: "OPENAI_API_KEY"
+    },
+    model: "gpt-5",
+    timeoutMs: 5000,
+    baseUrl: "https://api.openai.com/v1"
+  });
 }

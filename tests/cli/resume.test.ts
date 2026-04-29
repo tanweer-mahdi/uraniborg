@@ -12,6 +12,7 @@ import {
 } from "../../src/run/artifact-store.js";
 import type { FeynmanRuntimeStatus } from "../../src/review/index.js";
 import { ok } from "../../src/types/result.js";
+import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runResumeCommand", () => {
   const temporaryRoots: string[] = [];
@@ -127,21 +128,7 @@ Reason: Not available
           };
         },
         async loadConfig() {
-          return ok({
-            version: 1,
-            refine: {
-              endpoint: {
-                baseUrl: "https://api.example.com/v1",
-                apiKeyEnvVar: "OPENAI_API_KEY",
-                apiKey: "secret",
-                timeoutMs: 60000
-              },
-              defaults: {
-                model: "gpt-5.4",
-                temperature: 0.2
-              }
-            }
-          });
+          return ok(createResolvedConfig());
         },
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
@@ -385,21 +372,7 @@ Reason: Not available
             };
           },
           async loadConfig() {
-            return ok({
-              version: 1,
-              refine: {
-                endpoint: {
-                  baseUrl: "https://api.example.com/v1",
-                  apiKeyEnvVar: "OPENAI_API_KEY",
-                  apiKey: "secret",
-                  timeoutMs: 60000
-                },
-                defaults: {
-                  model: "gpt-5.4",
-                  temperature: 0.2
-                }
-              }
-            });
+            return ok(createResolvedConfig());
           },
           async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return {
@@ -588,21 +561,7 @@ Reason: Not available
           };
         },
         async loadConfig() {
-          return ok({
-            version: 1,
-            refine: {
-              endpoint: {
-                baseUrl: "https://api.example.com/v1",
-                apiKeyEnvVar: "OPENAI_API_KEY",
-                apiKey: "secret",
-                timeoutMs: 60000
-              },
-              defaults: {
-                model: "gpt-5.4",
-                temperature: 0.2
-              }
-            }
-          });
+          return ok(createResolvedConfig());
         },
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
@@ -797,21 +756,7 @@ Reason: Not available
           };
         },
         async loadConfig() {
-          return ok({
-            version: 1,
-            refine: {
-              endpoint: {
-                baseUrl: "https://api.example.com/v1",
-                apiKeyEnvVar: "OPENAI_API_KEY",
-                apiKey: "secret",
-                timeoutMs: 60000
-              },
-              defaults: {
-                model: "gpt-5.4",
-                temperature: 0.2
-              }
-            }
-          });
+          return ok(createResolvedConfig());
         },
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
@@ -898,3 +843,16 @@ Reason: Not available
     });
   });
 });
+
+function createResolvedConfig() {
+  return createResolvedTestUraniborgConfig({
+    profileId: "manual-openai-compatible",
+    binding: {
+      type: "env-var",
+      envVar: "OPENAI_API_KEY",
+      resolvedApiKey: "secret"
+    },
+    model: "gpt-5.4",
+    baseUrl: "https://api.example.com/v1"
+  });
+}
