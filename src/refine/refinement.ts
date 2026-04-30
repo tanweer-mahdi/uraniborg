@@ -1,7 +1,5 @@
-import { z } from "zod";
-
-import type { ResolvedUraniborgConfig } from "../types/app-config.js";
 import { err, ok, type Result } from "../types/result.js";
+import type { ResolvedUraniborgConfig } from "../types/app-config.js";
 
 export const URANIBORG_REFINEMENT_SYSTEM_PROMPT = `You are revising a research document in response to peer review.
 
@@ -70,18 +68,9 @@ export interface ParsedRefinementOutput {
   changeSummary: string;
 }
 
-export interface RefineApiResponse {
-  id?: string | undefined;
-  model?: string | undefined;
-  content: string;
-}
-
 export type RefineErrorCode =
   | "refine_http_error"
   | "refine_cancelled"
-  | "refine_response_invalid_json"
-  | "refine_response_invalid_schema"
-  | "refine_response_missing_content"
   | "refine_output_invalid";
 
 export interface RefineError {
@@ -96,24 +85,6 @@ export interface RefineError {
   responseId?: string | undefined;
   stopReason?: "stop" | "length" | "aborted" | "error" | undefined;
   rawOutput?: string | undefined;
-}
-
-export interface RefineHttpResponse {
-  ok: boolean;
-  status: number;
-  text: () => Promise<string>;
-}
-
-export interface RefineHttpClient {
-  fetch: (
-    requestUrl: string,
-    init: {
-      method: "POST";
-      headers: Record<string, string>;
-      body: string;
-      signal: AbortSignal;
-    }
-  ) => Promise<RefineHttpResponse>;
 }
 
 export interface ExecuteRefinementInput extends RefinePromptInput {
@@ -131,24 +102,6 @@ export interface ExecutedRefinement {
   stopReason?: "stop" | "length" | "aborted" | "error" | undefined;
   parsedOutput: ParsedRefinementOutput;
 }
-
-const textContentPartSchema = z.object({
-  text: z.string()
-});
-
-const chatCompletionResponseSchema = z.object({
-  id: z.string().optional(),
-  model: z.string().optional(),
-  choices: z
-    .array(
-      z.object({
-        message: z.object({
-          content: z.union([z.string(), z.array(textContentPartSchema)])
-        })
-      })
-    )
-    .min(1)
-});
 
 export function buildRefinePrompt(input: RefinePromptInput): RefinePrompt {
   return {
@@ -203,260 +156,16 @@ export function parseRefinementOutput(
   });
 }
 
-export async function executeManualCompatibleRefinement(
-  input: ExecuteRefinementInput,
-  httpClient: RefineHttpClient = createFetchRefineHttpClient()
-): Promise<Result<ExecutedRefinement, RefineError>> {
-  const prompt = buildRefinePrompt(input);
-  const requestUrl = buildChatCompletionsUrl(input.config.refine.endpoint.baseUrl);
-  const requestBody = JSON.stringify(
-    {
-      model: input.model,
-      temperature: input.config.refine.defaults.temperature,
-      ...(typeof input.config.refine.defaults.maxOutputTokens === "number"
-        ? { max_tokens: input.config.refine.defaults.maxOutputTokens }
-        : {}),
-      messages: [
-        {
-          role: "system",
-          content: prompt.systemPrompt
-        },
-        {
-          role: "user",
-          content: prompt.userPrompt
-        }
-      ]
-    },
-    null,
-    2
-  );
-  const abortController = new AbortController();
-  let timedOut = false;
-  const externalAbortListener = (): void => {
-    abortController.abort();
-  };
-
-  if (input.signal?.aborted) {
-    return err(
-      createRefineError({
-        code: "refine_cancelled",
-        message: "Refinement request was cancelled."
-      })
-    );
-  }
-
-  input.signal?.addEventListener("abort", externalAbortListener, { once: true });
-  const timeoutHandle = setTimeout(() => {
-    timedOut = true;
-    abortController.abort();
-  }, input.config.refine.endpoint.timeoutMs);
-
-  try {
-    const apiKey = input.config.revision.runtime.kind === "manual-compatible"
-      ? input.config.revision.runtime.apiKey
-      : input.config.refine.endpoint.apiKey;
-
-    if (typeof apiKey !== "string" || apiKey.length === 0) {
-      return err(
-        createRefineError({
-          code: "refine_http_error",
-          message: "Manual-compatible refinement runtime did not resolve an API key."
-        })
-      );
-    }
-
-    const response = await httpClient.fetch(requestUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`
-      },
-      body: requestBody,
-      signal: abortController.signal
-    });
-    const responseBody = await response.text();
-
-    if (!response.ok) {
-      return err(
-        createRefineError({
-          code: "refine_http_error",
-          message: `Refinement request failed with HTTP status ${response.status}.`,
-          details: responseBody.trim().length > 0 ? [responseBody.trim()] : undefined,
-          status: response.status
-        })
-      );
-    }
-
-    const parsedApiResponse = parseRefineApiResponse(responseBody);
-
-    if (!parsedApiResponse.ok) {
-      return parsedApiResponse;
-    }
-
-    const parsedOutput = parseRefinementOutput(parsedApiResponse.value.content);
-
-    if (!parsedOutput.ok) {
-      return err(
-        createRefineError({
-          ...parsedOutput.error,
-          provider: "manual-openai-compatible",
-          model: input.model,
-          requestLog: [`Request URL: ${requestUrl}`, "", requestBody].join("\n"),
-          responseLog: responseBody,
-          responseId: parsedApiResponse.value.id,
-          stopReason: "stop",
-          rawOutput: parsedApiResponse.value.content
-        })
-      );
-    }
-
-    return ok({
-      provider: "manual-openai-compatible",
-      model: input.model,
-      requestLog: [`Request URL: ${requestUrl}`, "", requestBody].join("\n"),
-      responseLog: responseBody,
-      responseId: parsedApiResponse.value.id,
-      stopReason: "stop",
-      parsedOutput: parsedOutput.value
-    });
-  } catch (error) {
-    if (input.signal?.aborted) {
-      return err(
-        createRefineError({
-          code: "refine_cancelled",
-          message: "Refinement request was cancelled."
-        })
-      );
-    }
-
-    if (timedOut) {
-      return err(
-        createRefineError({
-          code: "refine_http_error",
-          message: "Refinement request timed out."
-        })
-      );
-    }
-
-    return err(
-      createRefineError({
-        code: "refine_http_error",
-        message: "Refinement request could not be completed.",
-        details: [error instanceof Error ? error.message : "Unknown HTTP failure."]
-      })
-    );
-  } finally {
-    clearTimeout(timeoutHandle);
-    input.signal?.removeEventListener("abort", externalAbortListener);
-  }
-}
-
-export function parseRefineApiResponse(
-  responseBody: string
-): Result<RefineApiResponse, RefineError> {
-  let parsedJson: unknown;
-
-  try {
-    parsedJson = JSON.parse(responseBody) as unknown;
-  } catch (error) {
-    return err(
-      createRefineError({
-        code: "refine_response_invalid_json",
-        message: "Refinement endpoint returned invalid JSON.",
-        details: [error instanceof Error ? error.message : "Unknown JSON failure."]
-      })
-    );
-  }
-
-  const parsedResponse = chatCompletionResponseSchema.safeParse(parsedJson);
-
-  if (!parsedResponse.success) {
-    return err(
-      createRefineError({
-        code: "refine_response_invalid_schema",
-        message: "Refinement endpoint returned a response outside the expected chat-completions schema.",
-        details: parsedResponse.error.issues.map((issue) => issue.message)
-      })
-    );
-  }
-
-  const firstChoice = parsedResponse.data.choices[0];
-
-  if (firstChoice === undefined) {
-    return err(
-      createRefineError({
-        code: "refine_response_missing_content",
-        message: "Refinement endpoint returned no completion choices."
-      })
-    );
-  }
-
-  const content = extractResponseContent(firstChoice.message.content);
-
-  if (content.length === 0) {
-    return err(
-      createRefineError({
-        code: "refine_response_missing_content",
-        message: "Refinement endpoint returned an empty message content payload."
-      })
-    );
-  }
-
-  return ok({
-    id: parsedResponse.data.id,
-    model: parsedResponse.data.model,
-    content
-  });
-}
-
-export function createFetchRefineHttpClient(
-  fetchImplementation: typeof fetch = fetch
-): RefineHttpClient {
-  return {
-    async fetch(requestUrl, init): Promise<RefineHttpResponse> {
-      const response = await fetchImplementation(requestUrl, init);
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        async text(): Promise<string> {
-          return response.text();
-        }
-      };
-    }
-  };
-}
-
-function extractResponseContent(
-  content: string | Array<{ text: string }>
-): string {
-  if (typeof content === "string") {
-    return content.trim();
-  }
-
-  return content
-    .map((part) => part.text)
-    .join("")
-    .trim();
-}
-
-function buildChatCompletionsUrl(baseUrl: string): string {
-  const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  return new URL("chat/completions", normalizedBaseUrl).toString();
-}
-
-function createRefineError(input: RefineError): RefineError {
+export function createRefineError(input: {
+  code: RefineErrorCode;
+  message: string;
+  details?: readonly string[] | undefined;
+  status?: number | undefined;
+}): RefineError {
   return {
     code: input.code,
     message: input.message,
-    ...(input.details !== undefined ? { details: input.details } : {}),
-    ...(input.status !== undefined ? { status: input.status } : {}),
-    ...(input.provider !== undefined ? { provider: input.provider } : {}),
-    ...(input.model !== undefined ? { model: input.model } : {}),
-    ...(input.requestLog !== undefined ? { requestLog: input.requestLog } : {}),
-    ...(input.responseLog !== undefined ? { responseLog: input.responseLog } : {}),
-    ...(input.responseId !== undefined ? { responseId: input.responseId } : {}),
-    ...(input.stopReason !== undefined ? { stopReason: input.stopReason } : {}),
-    ...(input.rawOutput !== undefined ? { rawOutput: input.rawOutput } : {})
+    ...(input.details === undefined ? {} : { details: input.details }),
+    ...(typeof input.status === "number" ? { status: input.status } : {})
   };
 }

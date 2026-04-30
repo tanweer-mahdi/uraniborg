@@ -10,10 +10,8 @@ import {
 } from "../config/revision-auth.js";
 import { getRevisionProfile } from "../config/revision-profiles.js";
 import { err, ok, type Result } from "../types/result.js";
-import type { RefineHttpClient } from "./refinement.js";
 import {
   buildRefinePrompt,
-  executeManualCompatibleRefinement,
   parseRefinementOutput,
   type ExecuteRefinementInput,
   type ExecutedRefinement,
@@ -21,7 +19,6 @@ import {
 } from "./refinement.js";
 
 export interface ExecuteRefinementDependencies {
-  httpClient?: RefineHttpClient | undefined;
   authClient?: RevisionAuthClient | undefined;
 }
 
@@ -29,10 +26,6 @@ export async function executeRefinement(
   input: ExecuteRefinementInput,
   dependencies: ExecuteRefinementDependencies = {}
 ): Promise<Result<ExecutedRefinement, RefineError>> {
-  if (input.config.revision.runtime.kind === "manual-compatible") {
-    return executeManualCompatibleRefinement(input, dependencies.httpClient);
-  }
-
   const authClient = dependencies.authClient ?? createRevisionAuthClient();
   const profile = getRevisionProfile(input.config.revision.profile.id);
   const providerId = input.config.revision.runtime.providerId;
