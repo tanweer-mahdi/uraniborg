@@ -136,8 +136,7 @@ export async function collectModelsReport(
     parsedConfigResult,
     runtimeConfigResult,
     availableRevisionModels:
-      runtimeConfigResult.ok &&
-        runtimeConfigResult.value.revision.runtime.kind === "pi-managed"
+      runtimeConfigResult.ok
         ? (authClient.listAvailableModelIds?.(
             runtimeConfigResult.value.revision.runtime.providerId
           ) ?? [])
@@ -182,18 +181,12 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
     lines.push(`Active profile: ${getRevisionProfileLabel(report.runtimeConfigResult.value.revision.profile.id)}`);
     lines.push(`Default model: ${report.runtimeConfigResult.value.revision.defaults.model}`);
 
-    if (report.runtimeConfigResult.value.revision.runtime.kind === "pi-managed") {
-      lines.push(
-        `Runtime auth: Pi-managed (${report.runtimeConfigResult.value.revision.runtime.providerId})`
-      );
+    lines.push(
+      `Runtime auth: Pi-managed (${report.runtimeConfigResult.value.revision.runtime.providerId})`
+    );
 
-      for (const model of report.availableRevisionModels) {
-        lines.push(`- ${model}`);
-      }
-    } else {
-      lines.push(
-        `Compatible endpoint: ${report.runtimeConfigResult.value.refine.endpoint.baseUrl}`
-      );
+    for (const model of report.availableRevisionModels) {
+      lines.push(`- ${model}`);
     }
   } else if (report.parsedConfigResult.ok) {
     lines.push(`[fail] ${report.runtimeConfigResult.error.message}`);

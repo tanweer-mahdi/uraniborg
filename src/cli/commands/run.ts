@@ -180,7 +180,6 @@ export async function runRunCommand(
       {
         clock: dependencies.clock,
         filesystem: dependencies.filesystem,
-        httpClient: dependencies.httpClient,
         authClient: dependencies.authClient,
         runner,
         signal,
@@ -564,79 +563,51 @@ async function selectRefineModel(
     prompts: RunPrompts;
   }
 ): Promise<string> {
-  if (config.revision.runtime.kind === "pi-managed") {
-    const availableModels = [
-      ...(authClient.listAvailableModelIds?.(
-        config.revision.runtime.providerId
-      ) ?? [])
-    ]
-      .sort((left, right) => left.localeCompare(right));
+  const availableModels = [
+    ...(authClient.listAvailableModelIds?.(
+      config.revision.runtime.providerId
+    ) ?? [])
+  ].sort((left, right) => left.localeCompare(right));
 
-    if (availableModels.length === 0) {
-      throw new Error(
-        `No revision models are currently available for "${config.revision.profile.label}".`
-      );
-    }
-
-    if (typeof requestedRefineModel === "string" && requestedRefineModel.trim().length > 0) {
-      const modelId = requestedRefineModel.trim();
-
-      if (!availableModels.includes(modelId)) {
-        throw new Error(
-          `Selected revision model "${modelId}" is not available for "${config.revision.profile.label}". Available models: ${availableModels.join(", ")}`
-        );
-      }
-
-      return modelId;
-    }
-
-    if (!dependencies.interactive) {
-      if (availableModels.includes(config.refine.defaults.model)) {
-        return config.refine.defaults.model;
-      }
-
-      throw new Error(
-        `Non-interactive runs require --refine-model when the configured default model "${config.refine.defaults.model}" is not available for "${config.revision.profile.label}".`
-      );
-    }
-
-    const response = await dependencies.prompts.select({
-      message: `Which revision model for ${config.revision.profile.label}?`,
-      options: availableModels.map((model) => ({
-        value: model,
-        label: model
-      })),
-      ...(availableModels.includes(config.refine.defaults.model)
-        ? {
-            initialValue: config.refine.defaults.model
-          }
-        : {})
-    });
-
-    if (dependencies.prompts.isCancel(response)) {
-      dependencies.prompts.cancel("Uraniborg run cancelled.");
-      throw new Error("Uraniborg run cancelled.");
-    }
-
-    return response;
+  if (availableModels.length === 0) {
+    throw new Error(
+      `No revision models are currently available for "${config.revision.profile.label}".`
+    );
   }
 
   if (typeof requestedRefineModel === "string" && requestedRefineModel.trim().length > 0) {
-    return requestedRefineModel.trim();
+    const modelId = requestedRefineModel.trim();
+
+    if (!availableModels.includes(modelId)) {
+      throw new Error(
+        `Selected revision model "${modelId}" is not available for "${config.revision.profile.label}". Available models: ${availableModels.join(", ")}`
+      );
+    }
+
+    return modelId;
   }
 
   if (!dependencies.interactive) {
-    return config.refine.defaults.model;
+    if (availableModels.includes(config.refine.defaults.model)) {
+      return config.refine.defaults.model;
+    }
+
+    throw new Error(
+      `Non-interactive runs require --refine-model when the configured default model "${config.refine.defaults.model}" is not available for "${config.revision.profile.label}".`
+    );
   }
 
-  const response = await dependencies.prompts.text({
-    message: "Which revision model?",
-    defaultValue: config.refine.defaults.model,
-    validate(value) {
-      return value.trim().length > 0
-        ? undefined
-        : "Enter a revision model name.";
-    }
+  const response = await dependencies.prompts.select({
+    message: `Which revision model for ${config.revision.profile.label}?`,
+    options: availableModels.map((model) => ({
+      value: model,
+      label: model
+    })),
+    ...(availableModels.includes(config.refine.defaults.model)
+      ? {
+          initialValue: config.refine.defaults.model
+        }
+      : {})
   });
 
   if (dependencies.prompts.isCancel(response)) {
@@ -644,7 +615,7 @@ async function selectRefineModel(
     throw new Error("Uraniborg run cancelled.");
   }
 
-  return response.trim();
+  return response;
 }
 
 function parseIterationCount(input: string): number {

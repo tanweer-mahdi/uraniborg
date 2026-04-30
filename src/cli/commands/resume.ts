@@ -124,7 +124,6 @@ export async function runResumeCommand(
       {
         clock: dependencies.clock,
         filesystem: dependencies.filesystem,
-        httpClient: dependencies.httpClient,
         authClient,
         runner,
         signal,

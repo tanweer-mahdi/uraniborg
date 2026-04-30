@@ -6,8 +6,7 @@ import {
 import {
   executeRefinement,
   type ExecutedRefinement,
-  type RefineError,
-  type RefineHttpClient
+  type RefineError
 } from "../refine/index.js";
 import type { RevisionAuthClient } from "../config/revision-auth.js";
 import {
@@ -64,7 +63,6 @@ export interface ResumeRunLifecycleInput {
 export interface RunExecutionDependencies {
   clock?: RunExecutionClock | undefined;
   filesystem?: ReviewFilesystem | undefined;
-  httpClient?: RefineHttpClient | undefined;
   authClient?: RevisionAuthClient | undefined;
   runner?: FeynmanCommandRunner | undefined;
   signal?: AbortSignal | undefined;
@@ -251,7 +249,6 @@ async function continueRunLifecycle(
         {
           clock,
           filesystem,
-          httpClient: dependencies.httpClient,
           authClient: dependencies.authClient,
           runner: dependencies.runner,
           signal: dependencies.signal,
@@ -306,7 +303,6 @@ async function executeSingleIteration(
     clock: RunExecutionClock;
     writeLine: (message: string) => void;
     filesystem?: ReviewFilesystem | undefined;
-    httpClient?: RefineHttpClient | undefined;
     authClient?: RevisionAuthClient | undefined;
     runner?: FeynmanCommandRunner | undefined;
     signal?: AbortSignal | undefined;
@@ -466,7 +462,6 @@ async function executeRefinePhase(
     clock: RunExecutionClock;
     writeLine: (message: string) => void;
     filesystem?: ReviewFilesystem | undefined;
-    httpClient?: RefineHttpClient | undefined;
     authClient?: RevisionAuthClient | undefined;
     signal?: AbortSignal | undefined;
   }
@@ -507,7 +502,6 @@ async function executeRefinePhase(
       signal: dependencies.signal
     },
     {
-      httpClient: dependencies.httpClient,
       authClient: dependencies.authClient
     }
   );

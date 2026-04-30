@@ -18,7 +18,6 @@ import {
   type RevisionBrowserLauncher
 } from "../../config/index.js";
 import {
-  getGuidedRevisionAuthStrategies,
   getRevisionProfile,
   getRevisionProfileOptions,
   type UraniborgRevisionAuthStrategy,
@@ -55,6 +54,12 @@ interface RevisionCredentialSetupResult {
   providerContext?: UraniborgConfig["revision"]["providerContext"];
 }
 
+const BROWSER_LOGIN_STRATEGY: UraniborgRevisionAuthStrategy = {
+  authClass: "oauth",
+  acquisition: "browser-login",
+  guided: true
+};
+
 export async function runGuidedRevisionSetup(
   dependencies: RevisionSetupDependencies = {}
 ): Promise<void> {
@@ -86,19 +91,8 @@ export async function runGuidedRevisionSetup(
     initialConfig.revision.profile.id,
     prompts
   );
-  const authStrategy = await promptRevisionAuthStrategy(
-    profileId,
-    initialConfig,
-    prompts
-  );
-  const endpointBaseUrl = await promptRevisionEndpointBaseUrl(
-    profileId,
-    initialConfig.revision.endpoint.baseUrl,
-    prompts
-  );
   const credentialResult = await setupRevisionCredentialBinding(
     profileId,
-    authStrategy,
     initialConfig,
     prompts,
     authClient,
@@ -124,9 +118,7 @@ export async function runGuidedRevisionSetup(
   const profile = getRevisionProfile(profileId);
   const nextConfig: UraniborgConfig = createConfig({
     profileId,
-    authStrategy,
     credentialBinding: credentialResult.credentialBinding,
-    endpointBaseUrl,
     timeoutMs: initialConfig.revision.endpoint.timeoutMs,
     providerContext: credentialResult.providerContext,
     defaults: {
@@ -156,7 +148,10 @@ async function loadExistingConfig(
     return result.value;
   }
 
-  if (result.error.code === "config_not_found") {
+  if (
+    result.error.code === "config_not_found" ||
+    result.error.code === "config_stale_revision_setup"
+  ) {
     return null;
   }
 
@@ -168,16 +163,10 @@ function createDefaultConfig(): UraniborgConfig {
 
   return createConfig({
     profileId: profile.id,
-    authStrategy: {
-      authClass: "oauth",
-      acquisition: "browser-login",
-      guided: true
-    },
     credentialBinding: {
       type: "pi-auth-storage",
-      providerId: profile.piProviderId ?? "openai-codex"
+      providerId: profile.piProviderId
     },
-    endpointBaseUrl: profile.canonicalBaseUrl,
     timeoutMs: 60000,
     defaults: {
       model: profile.defaultModel,
@@ -188,9 +177,7 @@ function createDefaultConfig(): UraniborgConfig {
 
 function createConfig(options: {
   profileId: UraniborgRevisionProfileId;
-  authStrategy: UraniborgRevisionAuthStrategy;
   credentialBinding: UraniborgRevisionCredentialBinding;
-  endpointBaseUrl: string;
   timeoutMs: number;
   defaults: UraniborgConfig["revision"]["defaults"];
   providerContext?: UraniborgConfig["revision"]["providerContext"];
@@ -206,8 +193,8 @@ function createConfig(options: {
         label: profile.label
       },
       auth: {
-        class: options.authStrategy.authClass,
-        acquisition: options.authStrategy.acquisition
+        class: BROWSER_LOGIN_STRATEGY.authClass,
+        acquisition: BROWSER_LOGIN_STRATEGY.acquisition
       },
       credentialBinding: options.credentialBinding,
       ...(options.providerContext === undefined
@@ -216,17 +203,15 @@ function createConfig(options: {
             providerContext: options.providerContext
           }),
       endpoint: {
-        baseUrl: options.endpointBaseUrl,
-        overrideAllowed: profile.allowsEndpointOverride,
+        baseUrl: profile.canonicalBaseUrl,
         timeoutMs: options.timeoutMs
       },
       defaults: options.defaults
     },
     refine: {
       endpoint: {
-        baseUrl: options.endpointBaseUrl,
-        timeoutMs: options.timeoutMs,
-        ...deriveCompatibilitySecretFields(options.credentialBinding)
+        baseUrl: profile.canonicalBaseUrl,
+        timeoutMs: options.timeoutMs
       },
       defaults: options.defaults
     }
@@ -264,10 +249,7 @@ async function promptRevisionProfile(
     options: getRevisionProfileOptions().map((profile) => ({
       value: profile.id,
       label: profile.label,
-      hint:
-        profile.canonicalBaseUrl.length > 0
-          ? profile.canonicalBaseUrl
-          : "Enter a custom OpenAI-compatible endpoint."
+      hint: profile.canonicalBaseUrl
     })),
     initialValue: initialProfileId
   });
@@ -280,169 +262,18 @@ async function promptRevisionProfile(
   return response;
 }
 
-async function promptRevisionAuthStrategy(
-  profileId: UraniborgRevisionProfileId,
-  initialConfig: UraniborgConfig,
-  prompts: RevisionSetupPrompts
-): Promise<UraniborgRevisionAuthStrategy> {
-  const strategies = getGuidedRevisionAuthStrategies(profileId);
-  const initialStrategy =
-    initialConfig.revision.profile.id === profileId
-      ? strategies.find(
-          (strategy) =>
-            strategy.authClass === initialConfig.revision.auth.class &&
-            strategy.acquisition === initialConfig.revision.auth.acquisition
-        )
-      : undefined;
-
-  if (strategies.length === 0) {
-    throw new Error(
-      `No guided revision auth strategies are configured for "${getRevisionProfile(profileId).label}".`
-    );
-  }
-
-  if (strategies.length === 1) {
-    const onlyStrategy = strategies[0];
-
-    if (onlyStrategy === undefined) {
-      throw new Error("Expected a guided revision auth strategy.");
-    }
-
-    return onlyStrategy;
-  }
-
-  const response = await prompts.select({
-    message: "How should Uraniborg read the revision API key?",
-    options: strategies.map((strategy) => ({
-      value: strategy.acquisition,
-      label:
-        strategy.acquisition === "env-var"
-          ? "Use environment variable"
-          : "Store API key"
-    })),
-    initialValue: (initialStrategy ?? strategies[0])?.acquisition
-  });
-
-  if (prompts.isCancel(response)) {
-    prompts.cancel("Uraniborg revision setup cancelled.");
-    throw new Error("Uraniborg revision setup cancelled.");
-  }
-
-  const selectedStrategy = strategies.find(
-    (strategy) => strategy.acquisition === response
-  );
-
-  if (selectedStrategy === undefined) {
-    throw new Error("Expected a selected guided revision auth strategy.");
-  }
-
-  return selectedStrategy;
-}
-
-async function promptRevisionEndpointBaseUrl(
-  profileId: UraniborgRevisionProfileId,
-  initialBaseUrl: string,
-  prompts: RevisionSetupPrompts
-): Promise<string> {
-  const profile = getRevisionProfile(profileId);
-
-  if (!profile.allowsEndpointOverride) {
-    return profile.canonicalBaseUrl;
-  }
-
-  return promptText(
-    {
-      message: "OpenAI-compatible revision endpoint URL",
-      initialValue:
-        initialBaseUrl.length > 0 ? initialBaseUrl : "https://api.example.com/v1",
-      validate(value) {
-        try {
-          new URL(value);
-          return undefined;
-        } catch {
-          return "Enter a valid absolute URL.";
-        }
-      }
-    },
-    prompts
-  );
-}
-
 async function setupRevisionCredentialBinding(
   profileId: UraniborgRevisionProfileId,
-  authStrategy: UraniborgRevisionAuthStrategy,
   initialConfig: UraniborgConfig,
   prompts: RevisionSetupPrompts,
   authClient: RevisionAuthClient,
   browserLauncher: RevisionBrowserLauncher,
   writeLine: (message: string) => void
 ): Promise<RevisionCredentialSetupResult> {
-  if (
-    authStrategy.authClass === "api-key" &&
-    authStrategy.acquisition === "prompt-secret"
-  ) {
-    return {
-      credentialBinding: {
-        type: "stored-secret",
-        apiKey: await promptText(
-          {
-            message: "Revision API key",
-            initialValue:
-              initialConfig.revision.credentialBinding.type === "stored-secret"
-                ? initialConfig.revision.credentialBinding.apiKey
-                : "",
-            validate(value) {
-              return value.trim().length > 0
-                ? undefined
-                : "Enter the revision API key.";
-            }
-          },
-          prompts
-        )
-      }
-    };
-  }
-
-  if (
-    authStrategy.authClass === "api-key" &&
-    authStrategy.acquisition === "env-var"
-  ) {
-    return {
-      credentialBinding: {
-        type: "env-var",
-        envVar: await promptText(
-          {
-            message: "Revision API key environment variable",
-            initialValue:
-              initialConfig.revision.credentialBinding.type === "env-var"
-                ? initialConfig.revision.credentialBinding.envVar
-                : DEFAULT_REVISION_API_KEY_ENV_VAR,
-            validate(value) {
-              return value.trim().length > 0
-                ? undefined
-                : "Enter the environment variable name for the revision API key.";
-            }
-          },
-          prompts
-        )
-      }
-    };
-  }
-
-  if (
-    authStrategy.authClass === "oauth" &&
-    authStrategy.acquisition === "browser-login"
-  ) {
-    const profile = getRevisionProfile(profileId);
-    const providerId = profile.piProviderId;
-
-    if (typeof providerId !== "string" || providerId.length === 0) {
-      throw new Error(
-        `Expected a Pi provider id for "${profile.label}" browser login setup.`
-      );
-    }
-
-    const loginResult = await authClient.loginManagedCredential(providerId, {
+  const profile = getRevisionProfile(profileId);
+  const loginResult = await authClient.loginManagedCredential(
+    profile.piProviderId,
+    {
       onAuth: (info) => {
         writeLine(
           info.instructions ??
@@ -470,65 +301,43 @@ async function setupRevisionCredentialBinding(
       onProgress: (message) => {
         writeLine(message);
       }
-    });
+    }
+  );
 
-    const providerContext =
-      profileId === "openai-codex-chatgpt"
-        ? loginResult.accountId === undefined
+  const providerContext =
+    profileId === "openai-codex-chatgpt"
+      ? loginResult.accountId === undefined
+        ? undefined
+        : {
+            accountId: loginResult.accountId
+          }
+      : profileId === "gemini-cloud-code-assist"
+        ? loginResult.projectId === undefined
           ? undefined
           : {
-              accountId: loginResult.accountId
+              projectId: loginResult.projectId
             }
-        : profileId === "gemini-cloud-code-assist"
-          ? loginResult.projectId === undefined
-            ? undefined
-            : {
-                projectId: loginResult.projectId
-              }
-          : undefined;
+        : undefined;
 
-    for (const requiredField of profile.requiredProviderContext) {
-      const fieldValue = providerContext?.[requiredField];
+  for (const requiredField of profile.requiredProviderContext) {
+    const initialValue =
+      initialConfig.revision.profile.id === profileId
+        ? initialConfig.revision.providerContext?.[requiredField]
+        : undefined;
+    const fieldValue = providerContext?.[requiredField] ?? initialValue;
 
-      if (typeof fieldValue !== "string" || fieldValue.length === 0) {
-        throw new Error(
-          `Pi login for "${providerId}" did not produce the required provider context "${requiredField}".`
-        );
-      }
+    if (typeof fieldValue !== "string" || fieldValue.length === 0) {
+      throw new Error(
+        `Pi login for "${profile.piProviderId}" did not produce the required provider context "${requiredField}".`
+      );
     }
-
-    return {
-      credentialBinding: {
-        type: "pi-auth-storage",
-        providerId: loginResult.providerId
-      },
-      ...(providerContext === undefined ? {} : { providerContext })
-    };
   }
 
-  throw new Error(
-    `Guided revision setup does not support ${authStrategy.authClass}/${authStrategy.acquisition} for "${getRevisionProfile(profileId).label}".`
-  );
+  return {
+    credentialBinding: {
+      type: "pi-auth-storage",
+      providerId: loginResult.providerId
+    },
+    ...(providerContext === undefined ? {} : { providerContext })
+  };
 }
-
-function deriveCompatibilitySecretFields(
-  credentialBinding: UraniborgRevisionCredentialBinding
-): Partial<{
-  apiKey: string;
-  apiKeyEnvVar: string;
-}> {
-  switch (credentialBinding.type) {
-    case "stored-secret":
-      return {
-        apiKey: credentialBinding.apiKey
-      };
-    case "env-var":
-      return {
-        apiKeyEnvVar: credentialBinding.envVar
-      };
-    default:
-      return {};
-  }
-}
-
-const DEFAULT_REVISION_API_KEY_ENV_VAR = "OPENAI_API_KEY";
