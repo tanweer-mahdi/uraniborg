@@ -33,6 +33,11 @@ The system SHALL execute each review step against the current draft only, using 
 - **WHEN** the review step runs for any iteration
 - **THEN** the system does not provide `information-highway.md` to the review engine
 
+#### Scenario: Review step failure surfaces provider-authored error
+- **WHEN** an iteration enters the review phase, the embedded review runtime exits non-zero, and the runtime exposes a meaningful provider-authored failure message
+- **THEN** Uraniborg surfaces that provider-authored message directly to the user instead of leading with a generic process-exit wrapper
+- **AND** Uraniborg still preserves subprocess exit metadata and raw stderr in `iter-N/review.log`
+
 ### Requirement: Iteration-Local Review Workspace
 The system SHALL execute each Feynman review inside a fresh iteration-local workspace so Feynman's native `outputs/` directory and session state cannot collide with outputs from other runs or iterations.
 
@@ -57,15 +62,48 @@ The system SHALL execute each Feynman review inside a fresh iteration-local work
 - **THEN** it selects only a uniquely attributable new artifact from that invocation and fails the review step if the result remains ambiguous
 
 ### Requirement: Refinement Step Contract
-The system SHALL execute refinement with the current draft, the latest review, and the information highway, and SHALL reject responses that do not contain both the refined draft section and the change summary section.
+The system SHALL execute refinement with the current draft, the latest review, and the information highway through the revision execution layer, and SHALL reject responses that do not contain both the refined draft section and the change summary section.
 
-#### Scenario: Successful refinement step
-- **WHEN** the refine model returns output that matches the required parse contract
+#### Scenario: Successful managed refinement step
+- **WHEN** an iteration enters the refinement phase for a Pi-managed revision profile and the revision execution layer returns output that matches the required parse contract
 - **THEN** the system writes `iter-N/refined.md`, `iter-N/changes.md`, and `iter-N/refine.log`
 
+#### Scenario: Successful manual-compatible refinement step
+- **WHEN** an iteration enters the refinement phase for the `manual-openai-compatible` revision profile and the revision execution layer returns output that matches the required parse contract
+- **THEN** the system writes `iter-N/refined.md`, `iter-N/changes.md`, and `iter-N/refine.log`
+
+#### Scenario: Managed refinement runtime failure without usable text
+- **WHEN** the Pi-managed refinement runtime returns a terminal execution error or equivalent error stop without a usable final text payload
+- **THEN** Uraniborg surfaces that as a refinement execution failure instead of a malformed output contract failure
+- **AND** Uraniborg preserves the provider/runtime error details in local logs when available
+
 #### Scenario: Malformed refinement response
-- **WHEN** the refine model response omits either required section or produces empty parsed content
+- **WHEN** the refinement execution layer returns non-empty final text that omits either required section or produces empty parsed section content
 - **THEN** the system marks the run as failed for that phase instead of guessing how to recover the response
+
+#### Scenario: Malformed refinement response is preserved for inspection
+- **WHEN** the refinement execution layer returns non-empty final text but that text fails Uraniborg's required parse contract
+- **THEN** the system writes the raw refinement response text to an iteration-local artifact before failing the phase
+- **AND** the system surfaces a concise parse-contract failure message that points to the saved malformed output artifact
+
+#### Scenario: Managed provider option shaping
+- **WHEN** Uraniborg invokes Pi-managed refinement execution for a provider with known runtime option incompatibilities
+- **THEN** Uraniborg sends only the provider-compatible subset of managed execution options instead of a single unfiltered option set
+
+#### Scenario: OpenAI/Codex managed refinement omits temperature
+- **WHEN** Uraniborg invokes Pi-managed refinement execution for the `openai-codex` provider
+- **THEN** it does not send `temperature` in the managed provider call options
+
+### Requirement: Revision Runtime Snapshot
+The system SHALL snapshot the active revision runtime identity for each run in a way that distinguishes provider profile, auth path, and runtime context from legacy API-key-endpoint-only reporting.
+
+#### Scenario: Managed profile run snapshot
+- **WHEN** a run is created with a Pi-managed revision profile
+- **THEN** the run snapshot records the active revision profile identity, auth/acquisition mode, selected refine model, and any non-secret required provider context without pretending that `apiKeyConfigured` is the runtime truth
+
+#### Scenario: Manual-compatible run snapshot
+- **WHEN** a run is created with the `manual-openai-compatible` revision profile
+- **THEN** the run snapshot records the explicit endpoint override state and API-key-based runtime configuration for that profile
 
 ### Requirement: Structured Memory Updates
 The system SHALL append one structured memory block to `information-highway.md` after each successful refinement using the accepted points, rejected points, changes made, open issues, and regression guards from that iteration's `changes.md`.
