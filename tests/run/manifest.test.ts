@@ -79,14 +79,15 @@ describe("run manifest", () => {
   it("creates config snapshots without storing resolved secrets", () => {
     const snapshot = createRunConfigSnapshot({
       config: createResolvedTestUraniborgConfig({
-        profileId: "manual-openai-compatible",
+        profileId: "openai-codex-chatgpt",
         binding: {
-          type: "env-var",
-          envVar: "OPENAI_API_KEY",
-          resolvedApiKey: "secret"
+          type: "pi-auth-storage",
+          providerId: "openai-codex"
         },
         model: "gpt-5",
-        baseUrl: "https://api.example.com/v1"
+        providerContext: {
+          accountId: "acct_123"
+        }
       }),
       sourcePath: "/work/draft.md",
       title: "Draft",
@@ -99,13 +100,15 @@ describe("run manifest", () => {
     });
 
     expect(snapshot.revisionRuntime).toEqual({
-      profileId: "manual-openai-compatible",
-      profileLabel: "Manual OpenAI-compatible",
-      authClass: "api-key",
-      acquisition: "env-var",
-      credentialBindingType: "env-var",
-      baseUrl: "https://api.example.com/v1",
-      apiKeyConfigured: true,
+      profileId: "openai-codex-chatgpt",
+      profileLabel: "OpenAI/Codex",
+      authClass: "oauth",
+      acquisition: "browser-login",
+      credentialBindingType: "pi-auth-storage",
+      baseUrl: "https://chatgpt.com/backend-api",
+      providerContext: {
+        accountId: "acct_123"
+      },
       timeoutMs: 60000
     });
   });
@@ -131,13 +134,15 @@ describe("run manifest", () => {
           temperature: 0.2
         },
         revisionRuntime: {
-          profileId: "manual-openai-compatible",
-          profileLabel: "Manual OpenAI-compatible",
-          authClass: "api-key",
-          acquisition: "env-var",
-          credentialBindingType: "env-var",
-          baseUrl: "https://api.example.com/v1",
-          apiKeyConfigured: true,
+          profileId: "openai-codex-chatgpt",
+          profileLabel: "OpenAI/Codex",
+          authClass: "oauth",
+          acquisition: "browser-login",
+          credentialBindingType: "pi-auth-storage",
+          baseUrl: "https://chatgpt.com/backend-api",
+          providerContext: {
+            accountId: "acct_123"
+          },
           timeoutMs: 60000
         }
       },
