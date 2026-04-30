@@ -401,3 +401,153 @@ Suggested statuses:
 
 - Replace user-facing `refinement` wording with `revision` in the setup flow.
 - Keep internal implementation terminology separate from the product-facing CLI copy where possible.
+
+## UAT-OBS-013 - Provider runtime errors should be surfaced verbatim during run execution
+
+- Date: 2026-04-30
+- Category: ux
+- Status: confirmed
+- UAT case: host-shell iterative run with OpenAI/Codex-backed review selection
+- Command: `node dist/src/cli/main.js run ../associative_memory/Associative\ Memory\ for\ Reasoning\ Trace\ Synthesis.md`
+
+### Observation
+
+- The run failed with a low-signal wrapper message:
+  - `Pinned Feynman review exited with code 1 during iteration 1.`
+- The actual provider error was much more useful:
+  - `The 'gpt-5.1' model is not supported when using Codex with a ChatGPT account.`
+- This provider-owned error is the right level of abstraction for the user.
+- Uraniborg should not attempt to own or predict model-provider subscription semantics, entitlement rules, or account-specific model availability.
+- The responsibility here is to surface the provider error clearly at the CLI boundary instead of collapsing it into a process-exit summary.
+
+### Evidence
+
+- Terminal output ended with:
+  - `Pinned Feynman review exited with code 1 during iteration 1.`
+- The saved review log for the failed run showed the actionable root cause:
+  - [review.log](</Users/shahmahdihasan/.uraniborg/runs/2026-04-30T00-06-14Z-associative-memory-for-reasoning-trace-synthesis/iter-1/review.log>)
+- The logged stderr was:
+  - `{"detail":"The 'gpt-5.1' model is not supported when using Codex with a ChatGPT account."}`
+- After selecting a different model, the run proceeded successfully.
+
+### Recommendation
+
+- When a review or revision subprocess fails and stderr contains a clear provider-authored error, surface that message directly to the user.
+- Keep low-level process metadata such as `exit code 1` as secondary diagnostic detail in logs, not as the primary operator-facing failure message.
+- Do not add Uraniborg-owned heuristics for provider subscription behavior; let the provider define the rule and let Uraniborg relay it faithfully.
+
+## UAT-OBS-014 - Malformed revision output is enforced correctly but not observable enough
+
+- Date: 2026-04-30
+- Category: improvement
+- Status: confirmed
+- UAT case: host-shell iterative run with supported OpenAI/Codex review + revision models
+- Command: `node dist/src/cli/main.js run ../associative_memory/Associative\ Memory\ for\ Reasoning\ Trace\ Synthesis.md`
+
+### Observation
+
+- The review phase succeeded and the run reached the revision step.
+- Uraniborg then failed with:
+  - `Refinement output did not match the required === REFINED_DRAFT === / === CHANGE_SUMMARY === contract.`
+- This is the correct enforcement behavior at the product level: Uraniborg should keep a strict revision output contract.
+- The current failure mode is not observable enough for debugging because the operator is not shown the malformed revision output and the saved refine log only records the generic parser failure.
+- As a result, the user cannot easily tell whether the model:
+  - added wrapper prose
+  - omitted one section marker
+  - renamed a section
+  - produced extra trailing text
+  - or returned some other contract violation
+
+### Evidence
+
+- Terminal output reached:
+  - `Iteration 1/1: review`
+  - `Iteration 1/1: refine`
+  - `Refinement output did not match the required === REFINED_DRAFT === / === CHANGE_SUMMARY === contract.`
+- The run artifacts were created successfully under:
+  - [2026-04-30T00-14-50Z-associative-memory-for-reasoning-trace-synthesis](</Users/shahmahdihasan/.uraniborg/runs/2026-04-30T00-14-50Z-associative-memory-for-reasoning-trace-synthesis>)
+- The saved refine log currently contains only:
+  - `Error code: refine_output_invalid`
+  - `Message: Refinement output did not match the required === REFINED_DRAFT === / === CHANGE_SUMMARY === contract.`
+- The malformed raw revision output is not preserved in the current operator-facing artifact path.
+
+### Recommendation
+
+- Keep the strict revision contract unchanged.
+- Improve failure observability by:
+  - persisting the raw revision response text when parsing fails
+  - surfacing a concise failure message plus a pointer to the saved malformed output artifact
+  - keeping the parser failure as the primary contract error while making the actual offending output inspectable
+
+## UAT-OBS-015 - Empty managed revision error responses are currently misclassified as contract failures
+
+- Date: 2026-04-30
+- Category: improvement
+- Status: confirmed
+- UAT case: host-shell iterative run with supported OpenAI/Codex review + revision models after failure-observability improvements
+- Command: `node dist/src/cli/main.js run ../associative_memory/Associative\ Memory\ for\ Reasoning\ Trace\ Synthesis.md`
+
+### Observation
+
+- After the failure-observability changes, the run failed with:
+  - `Refinement output did not match the required === REFINED_DRAFT === / === CHANGE_SUMMARY === contract. See .../refine.response.txt for the raw refinement response.`
+- The saved refinement response artifact was empty.
+- The paired refine log showed:
+  - `Provider: openai-codex`
+  - `Model: gpt-5.2`
+  - `Stop reason: error`
+  - response `text: ""`
+  - zero token usage
+- This means the provider/runtime did not return a usable revision text payload at all.
+- Uraniborg is therefore misclassifying a managed provider/runtime execution error as a malformed revision-output contract failure.
+
+### Evidence
+
+- Terminal output pointed to:
+  - [refine.response.txt](</Users/shahmahdihasan/.uraniborg/runs/2026-04-30T02-33-31Z-associative-memory-for-reasoning-trace-synthesis/iter-1/refine.response.txt>)
+- That saved artifact was empty.
+- The paired log at
+  - [refine.log](</Users/shahmahdihasan/.uraniborg/runs/2026-04-30T02-33-31Z-associative-memory-for-reasoning-trace-synthesis/iter-1/refine.log>)
+  showed:
+  - `Stop reason: error`
+  - `text: ""`
+  - zero usage values
+
+### Recommendation
+
+- Keep the strict revision-output contract.
+- Add a separate managed-runtime failure classification for cases where the provider/runtime reports an execution error or returns no usable text payload.
+- Prefer surfacing provider/runtime error details before falling through to contract parsing.
+- Continue preserving the raw response artifact and paired diagnostics so the operator can inspect what Uraniborg actually received.
+
+## UAT-OBS-016 - Managed OpenAI/Codex revision requests currently send an unsupported `temperature` option
+
+- Date: 2026-04-30
+- Category: improvement
+- Status: confirmed
+- UAT case: host-shell iterative run with supported OpenAI/Codex review + revision models after managed-runtime failure reclassification
+- Command: `node dist/src/cli/main.js run ../associative_memory/Associative\ Memory\ for\ Reasoning\ Trace\ Synthesis.md`
+
+### Observation
+
+- The latest managed revision failure surfaced a high-signal provider/runtime error directly:
+  - `{"detail":"Unsupported parameter: temperature"}`
+- This indicates Uraniborg is still sending a generic managed refinement option set into the Codex runtime instead of shaping request options per provider capability.
+- The issue is no longer observability; it is request shaping compatibility in the managed revision execution path.
+
+### Evidence
+
+- Terminal output reached:
+  - `Iteration 1/1: review`
+  - `Iteration 1/1: refine`
+  - `{"detail":"Unsupported parameter: temperature"}`
+- The managed refinement path currently passes `temperature` into `completeSimple(...)` in:
+  - [src/refine/execution.ts](/Users/shahmahdihasan/uraniborg/src/refine/execution.ts:84)
+- The Codex provider implementation in Pi includes `temperature` only when supplied, which aligns with Uraniborg being the caller that introduced the unsupported field:
+  - [openai-codex-responses.js](</Users/shahmahdihasan/uraniborg/node_modules/@mariozechner/pi-ai/dist/providers/openai-codex-responses.js:222>)
+
+### Recommendation
+
+- Add provider-aware option shaping for Pi-managed revision execution.
+- Do not send `temperature` to the OpenAI/Codex managed runtime path.
+- More generally, Uraniborg should pass only provider-supported managed execution options rather than assuming one generic option set fits every Pi-managed provider.
