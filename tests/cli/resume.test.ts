@@ -1141,13 +1141,14 @@ Reason: Not available
 
 function createResolvedConfig() {
   return createResolvedTestUraniborgConfig({
-    profileId: "manual-openai-compatible",
+    profileId: "openai-codex-chatgpt",
     binding: {
-      type: "env-var",
-      envVar: "OPENAI_API_KEY",
-      resolvedApiKey: "secret"
+      type: "pi-auth-storage",
+      providerId: "openai-codex"
     },
-    model: "gpt-5.4",
-    baseUrl: "https://api.example.com/v1"
+    providerContext: {
+      accountId: "acct_123"
+    },
+    model: "gpt-5.4"
   });
 }

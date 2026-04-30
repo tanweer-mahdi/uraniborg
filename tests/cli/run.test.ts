@@ -27,6 +27,7 @@ import type {
   FeynmanCommandRunner,
   FeynmanRuntimeStatus
 } from "../../src/review/index.js";
+import type { RevisionAuthClient } from "../../src/config/index.js";
 import { ok } from "../../src/types/result.js";
 import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 import { completeSimple } from "@mariozechner/pi-ai";
@@ -41,6 +42,7 @@ describe("runRunCommand", () => {
       })
     );
     temporaryRoots.length = 0;
+    vi.mocked(completeSimple).mockReset();
   });
 
   it("executes a one-iteration non-interactive run and writes canonical artifacts", async () => {
@@ -53,6 +55,56 @@ describe("runRunCommand", () => {
     const homeDirectory = path.join(temporaryRoot, "home");
     const runner = createReviewRunner();
     const outputs: string[] = [];
+    const completeSimpleMock = vi.mocked(completeSimple);
+    completeSimpleMock.mockResolvedValueOnce({
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: `=== REFINED_DRAFT ===
+# Draft
+
+Improved argument.
+
+=== CHANGE_SUMMARY ===
+## Accepted reviewer points
+- Clarify the core claim
+
+## Rejected reviewer points
+- Add invented experiment
+Reason: Unsupported by available material
+
+## Changes made
+- Rewrote the abstract and framing
+
+## Open issues
+- Evaluation remains incomplete
+
+## Regression guards
+- Do not add unsupported quantitative claims`
+        }
+      ],
+      api: "openai-codex-responses",
+      provider: "openai-codex",
+      model: "gpt-5.4",
+      responseId: "resp-1",
+      usage: {
+        input: 10,
+        output: 20,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 30,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0
+        }
+      },
+      stopReason: "stop",
+      timestamp: Date.now()
+    });
 
     await runRunCommand(
       sourceFile,
@@ -92,6 +144,7 @@ describe("runRunCommand", () => {
         async loadConfig() {
           return ok(createResolvedConfig());
         },
+        authClient: createManagedAuthClient("gpt-5.4"),
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
@@ -153,47 +206,6 @@ describe("runRunCommand", () => {
             },
             isLayoutValid: true
           };
-        },
-        httpClient: {
-          async fetch() {
-            return {
-              ok: true,
-              status: 200,
-              async text() {
-                return JSON.stringify({
-                  id: "resp-1",
-                  model: "gpt-5.4",
-                  choices: [
-                    {
-                      message: {
-                        content: `=== REFINED_DRAFT ===
-# Draft
-
-Improved argument.
-
-=== CHANGE_SUMMARY ===
-## Accepted reviewer points
-- Clarify the core claim
-
-## Rejected reviewer points
-- Add invented experiment
-Reason: Unsupported by available material
-
-## Changes made
-- Rewrote the abstract and framing
-
-## Open issues
-- Evaluation remains incomplete
-
-## Regression guards
-- Do not add unsupported quantitative claims`
-                      }
-                    }
-                  ]
-                });
-              }
-            };
-          }
         },
         runner,
         clock: {
@@ -536,6 +548,36 @@ Improved argument.
 === CHANGE_SUMMARY ===
 ## Accepted reviewer points
 - Tightened claims`;
+    const completeSimpleMock = vi.mocked(completeSimple);
+    completeSimpleMock.mockResolvedValueOnce({
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: malformedResponse
+        }
+      ],
+      api: "openai-codex-responses",
+      provider: "openai-codex",
+      model: "gpt-5.4",
+      responseId: "resp-malformed-1",
+      usage: {
+        input: 10,
+        output: 20,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 30,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0
+        }
+      },
+      stopReason: "stop",
+      timestamp: Date.now()
+    });
 
     await expect(
       runRunCommand(
@@ -557,6 +599,7 @@ Improved argument.
           async loadConfig() {
             return ok(createResolvedConfig());
           },
+          authClient: createManagedAuthClient("gpt-5.4"),
           async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return createReadyRuntimeStatus(homeDirectory);
           },
@@ -632,27 +675,6 @@ Improved argument.
                 exitCode: 0,
                 stdout: "review complete\n",
                 stderr: ""
-              };
-            }
-          },
-          httpClient: {
-            async fetch() {
-              return {
-                ok: true,
-                status: 200,
-                async text() {
-                  return JSON.stringify({
-                    id: "resp-1",
-                    model: "gpt-5.4",
-                    choices: [
-                      {
-                        message: {
-                          content: malformedResponse
-                        }
-                      }
-                    ]
-                  });
-                }
               };
             }
           },
@@ -922,6 +944,65 @@ Improved argument.
     const homeDirectory = path.join(temporaryRoot, "home");
     const requestBodies: string[] = [];
     let reviewInvocationCount = 0;
+    const completeSimpleMock = vi.mocked(completeSimple);
+    completeSimpleMock.mockImplementation(async (_model, context) => {
+      requestBodies.push(
+        typeof context.messages[0]?.content === "string"
+          ? context.messages[0].content
+          : ""
+      );
+      const iterationNumber = requestBodies.length;
+
+      return {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: `=== REFINED_DRAFT ===
+# Draft
+
+Iteration ${iterationNumber} revision.
+
+=== CHANGE_SUMMARY ===
+## Accepted reviewer points
+- Address review point ${iterationNumber}
+
+## Rejected reviewer points
+- Reject unsupported ask ${iterationNumber}
+Reason: Unsupported by available material
+
+## Changes made
+- Applied iteration ${iterationNumber} revision
+
+## Open issues
+- Open issue ${iterationNumber}
+
+## Regression guards
+- Guard ${iterationNumber}`
+          }
+        ],
+        api: "openai-codex-responses",
+        provider: "openai-codex",
+        model: "gpt-5.4",
+        responseId: `resp-${iterationNumber}`,
+        usage: {
+          input: 10,
+          output: 20,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 30,
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0
+          }
+        },
+        stopReason: "stop",
+        timestamp: Date.now()
+      };
+    });
 
     await runRunCommand(
       sourceFile,
@@ -942,6 +1023,7 @@ Improved argument.
         async loadConfig() {
           return ok(createResolvedConfig());
         },
+        authClient: createManagedAuthClient("gpt-5.4"),
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return createReadyRuntimeStatus(homeDirectory);
         },
@@ -989,50 +1071,6 @@ Improved argument.
             },
             isLayoutValid: true
           };
-        },
-        httpClient: {
-          async fetch(_requestUrl, init) {
-            requestBodies.push(init.body);
-            const iterationNumber = requestBodies.length;
-
-            return {
-              ok: true,
-              status: 200,
-              async text() {
-                return JSON.stringify({
-                  id: `resp-${iterationNumber}`,
-                  model: "gpt-5.4",
-                  choices: [
-                    {
-                      message: {
-                        content: `=== REFINED_DRAFT ===
-# Draft
-
-Iteration ${iterationNumber} revision.
-
-=== CHANGE_SUMMARY ===
-## Accepted reviewer points
-- Address review point ${iterationNumber}
-
-## Rejected reviewer points
-- Reject unsupported ask ${iterationNumber}
-Reason: Unsupported by available material
-
-## Changes made
-- Applied iteration ${iterationNumber} revision
-
-## Open issues
-- Open issue ${iterationNumber}
-
-## Regression guards
-- Guard ${iterationNumber}`
-                      }
-                    }
-                  ]
-                });
-              }
-            };
-          }
         },
         runner: {
           async run(
@@ -1084,7 +1122,7 @@ Reason: Unsupported by available material
     );
 
     expect(requestBodies).toHaveLength(2);
-    expect(requestBodies[0]).toContain("INFORMATION_HIGHWAY\\n");
+    expect(requestBodies[0]).toContain("INFORMATION_HIGHWAY");
     expect(requestBodies[1]).toContain("## Iteration 1");
     expect(requestBodies[1]).toContain("Guard 1");
     await expect(
@@ -1363,15 +1401,57 @@ function createPaths(homeDirectory: string) {
 
 function createResolvedConfig() {
   return createResolvedTestUraniborgConfig({
-    profileId: "manual-openai-compatible",
+    profileId: "openai-codex-chatgpt",
     binding: {
-      type: "env-var",
-      envVar: "OPENAI_API_KEY",
-      resolvedApiKey: "secret"
+      type: "pi-auth-storage",
+      providerId: "openai-codex"
     },
-    model: "gpt-5.4",
-    baseUrl: "https://api.example.com/v1"
+    providerContext: {
+      accountId: "acct_123"
+    },
+    model: "gpt-5.4"
   });
+}
+
+function createManagedAuthClient(modelId: string): RevisionAuthClient {
+  return {
+    async loginManagedCredential() {
+      throw new Error("Login should not run during this test.");
+    },
+    async resolveManagedCredential() {
+      throw new Error("Managed credential resolution should not run directly in this test.");
+    },
+    async resolveManagedModel(providerId: string, requestedModelId: string) {
+      expect(providerId).toBe("openai-codex");
+      expect(requestedModelId).toBe(modelId);
+
+      return ok({
+        providerId,
+        model: {
+          id: requestedModelId,
+          name: requestedModelId,
+          provider: providerId,
+          api: "openai-codex-responses",
+          baseUrl: "https://chatgpt.com/backend-api",
+          input: ["text"] satisfies Array<"text" | "image">,
+          reasoning: true,
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0
+          },
+          contextWindow: 200000,
+          maxTokens: 32768
+        },
+        apiKey: "oauth-token",
+        accountId: "acct_123"
+      });
+    },
+    listAvailableModelIds() {
+      return [modelId];
+    }
+  };
 }
 
 function createInteractivePrompts(
