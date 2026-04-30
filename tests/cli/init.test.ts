@@ -9,9 +9,10 @@ import type { UraniborgConfig } from "../../src/types/app-config.js";
 import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runInitCommand", () => {
-  it("prompts only for base URL, API key, and model on first run", async () => {
+  it("prompts only for profile and model on first run", async () => {
     const promptsAsked: string[] = [];
     let savedConfig: UraniborgConfig | undefined;
+    let loginAttempts = 0;
 
     await runInitCommand({
       resolvePaths() {
@@ -56,14 +57,23 @@ describe("runInitCommand", () => {
       async saveConfig(_configFilePath, config) {
         savedConfig = config;
       },
+      authClient: {
+        async loginManagedCredential(providerId) {
+          loginAttempts += 1;
+          expect(providerId).toBe("openai-codex");
+          return {
+            providerId: "openai-codex",
+            accountId: "acct_test"
+          };
+        },
+        async resolveManagedCredential() {
+          throw new Error("Managed credential resolution should not run in this test.");
+        }
+      },
       prompts: createPromptHarness(
         {
-          selectAnswers: ["manual-openai-compatible", "prompt-secret"],
-          textAnswers: [
-            "https://api.example.com/v1",
-            "secret-key",
-            "gpt-5.4"
-          ]
+          selectAnswers: ["openai-codex-chatgpt"],
+          textAnswers: ["gpt-5.4"]
         },
         promptsAsked
       )
@@ -71,26 +81,27 @@ describe("runInitCommand", () => {
 
     expect(promptsAsked).toEqual([
       "Which revision provider profile should Uraniborg use?",
-      "How should Uraniborg read the revision API key?",
-      "OpenAI-compatible revision endpoint URL",
-      "Revision API key",
       "Default revision model"
     ]);
+    expect(loginAttempts).toBe(1);
     expect(savedConfig).toEqual(
       createTestUraniborgConfig({
-        profileId: "manual-openai-compatible",
+        profileId: "openai-codex-chatgpt",
         credentialBinding: {
-          type: "stored-secret",
-          apiKey: "secret-key"
+          type: "pi-auth-storage",
+          providerId: "openai-codex"
         },
         model: "gpt-5.4",
-        baseUrl: "https://api.example.com/v1"
+        providerContext: {
+          accountId: "acct_test"
+        }
       })
     );
   });
 
   it("preserves hidden advanced settings from an existing config", async () => {
     let savedConfig: UraniborgConfig | undefined;
+    let loginAttempts = 0;
 
     await runInitCommand({
       resolvePaths() {
@@ -129,47 +140,57 @@ describe("runInitCommand", () => {
       async loadConfig() {
         return ok(
           createTestUraniborgConfig({
-            profileId: "manual-openai-compatible",
-            credentialBinding: {
-              type: "env-var",
-              envVar: "OPENAI_API_KEY"
-            },
+            profileId: "openai-codex-chatgpt",
             model: "gpt-4.1",
             temperature: 0.7,
             maxOutputTokens: 2000,
             timeoutMs: 45000,
-            baseUrl: "https://legacy.example.com/v1"
+            providerContext: {
+              accountId: "acct_existing"
+            }
           })
         );
       },
       async saveConfig(_configFilePath, config) {
         savedConfig = config;
       },
+      authClient: {
+        async loginManagedCredential(providerId) {
+          loginAttempts += 1;
+          expect(providerId).toBe("openai-codex");
+          return {
+            providerId: "openai-codex",
+            accountId: "acct_next"
+          };
+        },
+        async resolveManagedCredential() {
+          throw new Error("Managed credential resolution should not run in this test.");
+        }
+      },
       prompts: createPromptHarness(
         {
-          selectAnswers: ["manual-openai-compatible", "prompt-secret"],
-          textAnswers: [
-            "https://api.example.com/v1",
-            "secret-key",
-            "gpt-5.4"
-          ]
+          selectAnswers: ["openai-codex-chatgpt"],
+          textAnswers: ["gpt-5.4"]
         },
         []
       )
     });
 
+    expect(loginAttempts).toBe(1);
     expect(savedConfig).toEqual(
       createTestUraniborgConfig({
-        profileId: "manual-openai-compatible",
+        profileId: "openai-codex-chatgpt",
         credentialBinding: {
-          type: "stored-secret",
-          apiKey: "secret-key"
+          type: "pi-auth-storage",
+          providerId: "openai-codex"
         },
         model: "gpt-5.4",
         temperature: 0.7,
         maxOutputTokens: 2000,
         timeoutMs: 45000,
-        baseUrl: "https://api.example.com/v1"
+        providerContext: {
+          accountId: "acct_next"
+        }
       })
     );
   });

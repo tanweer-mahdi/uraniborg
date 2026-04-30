@@ -14,6 +14,7 @@ describe("runRevisionCommand", () => {
   it("runs the guided revision setup flow through `revision --setup`", async () => {
     const promptsAsked: string[] = [];
     let savedConfig: UraniborgConfig | undefined;
+    let loginAttempts = 0;
 
     await runRevisionCommand(
       {
@@ -36,8 +37,13 @@ describe("runRevisionCommand", () => {
           savedConfig = config;
         },
         authClient: {
-          async loginManagedCredential() {
-            throw new Error("Pi-managed browser login should not run in this test.");
+          async loginManagedCredential(providerId) {
+            loginAttempts += 1;
+            expect(providerId).toBe("openai-codex");
+            return {
+              providerId: "openai-codex",
+              accountId: "acct_test"
+            };
           },
           async resolveManagedCredential() {
             throw new Error("Managed credential resolution should not run in this test.");
@@ -45,8 +51,8 @@ describe("runRevisionCommand", () => {
         },
         prompts: createPromptHarness(
           {
-            selectAnswers: ["manual-openai-compatible", "prompt-secret"],
-            textAnswers: ["https://api.example.com/v1", "secret-key", "gpt-5.4"]
+            selectAnswers: ["openai-codex-chatgpt"],
+            textAnswers: ["gpt-5.4"]
           },
           promptsAsked
         )
@@ -55,20 +61,20 @@ describe("runRevisionCommand", () => {
 
     expect(promptsAsked).toEqual([
       "Which revision provider profile should Uraniborg use?",
-      "How should Uraniborg read the revision API key?",
-      "OpenAI-compatible revision endpoint URL",
-      "Revision API key",
       "Default revision model"
     ]);
+    expect(loginAttempts).toBe(1);
     expect(savedConfig).toEqual(
       createTestUraniborgConfig({
-        profileId: "manual-openai-compatible",
+        profileId: "openai-codex-chatgpt",
         credentialBinding: {
-          type: "stored-secret",
-          apiKey: "secret-key"
+          type: "pi-auth-storage",
+          providerId: "openai-codex"
         },
         model: "gpt-5.4",
-        baseUrl: "https://api.example.com/v1"
+        providerContext: {
+          accountId: "acct_test"
+        }
       })
     );
   });
