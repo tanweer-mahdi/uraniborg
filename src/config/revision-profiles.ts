@@ -1,25 +1,16 @@
 export type UraniborgRevisionProfileId =
   | "openai-codex-chatgpt"
   | "claude-browser"
-  | "gemini-cloud-code-assist"
-  | "manual-openai-compatible"
-  | "claude-api"
-  | "gemini-direct"
-  ;
+  | "gemini-cloud-code-assist";
 
 export type UraniborgRevisionProviderFamily =
   | "openai-codex"
   | "claude"
-  | "gemini"
-  | "openai-compatible";
+  | "gemini";
 
-export type UraniborgRevisionAuthClass = "api-key" | "oauth" | "adc";
+export type UraniborgRevisionAuthClass = "oauth";
 
-export type UraniborgRevisionAuthAcquisition =
-  | "prompt-secret"
-  | "env-var"
-  | "browser-login"
-  | "ambient";
+export type UraniborgRevisionAuthAcquisition = "browser-login";
 
 export interface UraniborgRevisionAuthStrategy {
   authClass: UraniborgRevisionAuthClass;
@@ -32,13 +23,17 @@ export interface UraniborgRevisionProfile {
   label: string;
   family: UraniborgRevisionProviderFamily;
   canonicalBaseUrl: string;
-  allowsEndpointOverride: boolean;
   requiredProviderContext: readonly ("accountId" | "projectId")[];
   authStrategies: readonly UraniborgRevisionAuthStrategy[];
-  piProviderId?: string | undefined;
+  piProviderId: string;
   defaultModel: string;
-  deprecated: boolean;
 }
+
+const BROWSER_LOGIN_STRATEGY: UraniborgRevisionAuthStrategy = {
+  authClass: "oauth",
+  acquisition: "browser-login",
+  guided: true
+};
 
 const REVISION_PROFILES: readonly UraniborgRevisionProfile[] = [
   {
@@ -46,125 +41,30 @@ const REVISION_PROFILES: readonly UraniborgRevisionProfile[] = [
     label: "OpenAI/Codex",
     family: "openai-codex",
     canonicalBaseUrl: "https://chatgpt.com/backend-api",
-    allowsEndpointOverride: false,
     requiredProviderContext: ["accountId"],
-    authStrategies: [
-      {
-        authClass: "oauth",
-        acquisition: "browser-login",
-        guided: true
-      }
-    ],
+    authStrategies: [BROWSER_LOGIN_STRATEGY],
     piProviderId: "openai-codex",
-    defaultModel: "gpt-5.4",
-    deprecated: false
+    defaultModel: "gpt-5.4"
   },
   {
     id: "claude-browser",
     label: "Claude",
     family: "claude",
     canonicalBaseUrl: "https://api.anthropic.com",
-    allowsEndpointOverride: false,
     requiredProviderContext: [],
-    authStrategies: [
-      {
-        authClass: "oauth",
-        acquisition: "browser-login",
-        guided: true
-      }
-    ],
+    authStrategies: [BROWSER_LOGIN_STRATEGY],
     piProviderId: "anthropic",
-    defaultModel: "claude-sonnet-4-5",
-    deprecated: false
+    defaultModel: "claude-sonnet-4-5"
   },
   {
     id: "gemini-cloud-code-assist",
     label: "Gemini",
     family: "gemini",
     canonicalBaseUrl: "https://cloudcode-pa.googleapis.com",
-    allowsEndpointOverride: false,
     requiredProviderContext: ["projectId"],
-    authStrategies: [
-      {
-        authClass: "oauth",
-        acquisition: "browser-login",
-        guided: true
-      }
-    ],
+    authStrategies: [BROWSER_LOGIN_STRATEGY],
     piProviderId: "google-gemini-cli",
-    defaultModel: "gemini-2.5-pro",
-    deprecated: false
-  },
-  {
-    id: "manual-openai-compatible",
-    label: "Manual OpenAI-compatible",
-    family: "openai-compatible",
-    canonicalBaseUrl: "",
-    allowsEndpointOverride: true,
-    requiredProviderContext: [],
-    authStrategies: [
-      {
-        authClass: "api-key",
-        acquisition: "prompt-secret",
-        guided: true
-      },
-      {
-        authClass: "api-key",
-        acquisition: "env-var",
-        guided: true
-      }
-    ],
-    defaultModel: "gpt-5.4",
-    deprecated: false
-  },
-  {
-    id: "claude-api",
-    label: "Claude",
-    family: "claude",
-    canonicalBaseUrl: "https://api.anthropic.com",
-    allowsEndpointOverride: false,
-    requiredProviderContext: [],
-    authStrategies: [
-      {
-        authClass: "api-key",
-        acquisition: "prompt-secret",
-        guided: false
-      },
-      {
-        authClass: "api-key",
-        acquisition: "env-var",
-        guided: false
-      }
-    ],
-    defaultModel: "claude-sonnet-4-5",
-    deprecated: true
-  },
-  {
-    id: "gemini-direct",
-    label: "Gemini",
-    family: "gemini",
-    canonicalBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    allowsEndpointOverride: false,
-    requiredProviderContext: [],
-    authStrategies: [
-      {
-        authClass: "api-key",
-        acquisition: "prompt-secret",
-        guided: false
-      },
-      {
-        authClass: "api-key",
-        acquisition: "env-var",
-        guided: false
-      },
-      {
-        authClass: "adc",
-        acquisition: "ambient",
-        guided: false
-      }
-    ],
-    defaultModel: "gemini-2.5-pro",
-    deprecated: true
+    defaultModel: "gemini-2.5-pro"
   }
 ] as const;
 
@@ -187,15 +87,13 @@ export function getRevisionProfileLabel(
 }
 
 export function getRevisionProfileOptions(): readonly UraniborgRevisionProfile[] {
-  return REVISION_PROFILES.filter((profile) => !profile.deprecated);
+  return REVISION_PROFILES;
 }
 
 export function getGuidedRevisionAuthStrategies(
   profileId: UraniborgRevisionProfileId
 ): readonly UraniborgRevisionAuthStrategy[] {
-  return getRevisionProfile(profileId).authStrategies.filter(
-    (strategy) => strategy.guided
-  );
+  return getRevisionProfile(profileId).authStrategies;
 }
 
 export function supportsRevisionAuthStrategy(

@@ -8,8 +8,6 @@ import type {
 export interface UraniborgRefineEndpointConfig {
   baseUrl: string;
   timeoutMs: number;
-  apiKey?: string | undefined;
-  apiKeyEnvVar?: string | undefined;
 }
 
 export interface UraniborgRevisionDefaults {
@@ -29,22 +27,10 @@ export interface UraniborgRevisionAuthConfig {
   acquisition: UraniborgRevisionAuthAcquisition;
 }
 
-export type UraniborgRevisionCredentialBinding =
-  | {
-      type: "stored-secret";
-      apiKey: string;
-    }
-  | {
-      type: "env-var";
-      envVar: string;
-    }
-  | {
-      type: "pi-auth-storage";
-      providerId: string;
-    }
-  | {
-      type: "adc";
-    };
+export interface UraniborgRevisionCredentialBinding {
+  type: "pi-auth-storage";
+  providerId: string;
+}
 
 export interface UraniborgRevisionProviderContext {
   accountId?: string | undefined;
@@ -53,7 +39,6 @@ export interface UraniborgRevisionProviderContext {
 
 export interface UraniborgRevisionEndpointConfig {
   baseUrl: string;
-  overrideAllowed: boolean;
   timeoutMs: number;
 }
 
@@ -76,19 +61,12 @@ export interface UraniborgConfig {
 }
 
 export interface ResolvedUraniborgRefineEndpointConfig
-  extends UraniborgRefineEndpointConfig {
-  apiKey?: string | undefined;
-}
+  extends UraniborgRefineEndpointConfig {}
 
-export type UraniborgRevisionRuntime =
-  | {
-      kind: "manual-compatible";
-      apiKey: string;
-    }
-  | {
-      kind: "pi-managed";
-      providerId: string;
-    };
+export interface UraniborgRevisionRuntime {
+  kind: "pi-managed";
+  providerId: string;
+}
 
 export interface ResolvedUraniborgRevisionConfig extends UraniborgRevisionConfig {
   runtime: UraniborgRevisionRuntime;
@@ -109,12 +87,10 @@ export type UraniborgConfigLoadErrorCode =
   | "config_invalid_json"
   | "config_invalid_schema"
   | "config_stale_revision_setup"
-  | "secret_missing"
   | "managed_credential_missing"
   | "managed_credential_unreadable"
   | "provider_context_missing"
-  | "model_unavailable"
-  | "unsupported_auth_class";
+  | "model_unavailable";
 
 export interface UraniborgConfigLoadError {
   code: UraniborgConfigLoadErrorCode;

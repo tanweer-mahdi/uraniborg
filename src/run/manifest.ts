@@ -92,7 +92,6 @@ export interface RunConfigSnapshot {
     credentialBindingType: string;
     baseUrl: string;
     timeoutMs: number;
-    apiKeyConfigured?: boolean | undefined;
     providerContext?: {
       accountId?: string | undefined;
       projectId?: string | undefined;
@@ -208,11 +207,6 @@ export function createRunConfigSnapshot(input: {
       credentialBindingType: input.config.revision.credentialBinding.type,
       baseUrl: input.config.refine.endpoint.baseUrl,
       timeoutMs: input.config.refine.endpoint.timeoutMs,
-      ...(input.config.revision.runtime.kind === "manual-compatible"
-        ? {
-            apiKeyConfigured: input.config.revision.runtime.apiKey.length > 0
-          }
-        : {}),
       ...(input.config.revision.providerContext === undefined
         ? {}
         : {
