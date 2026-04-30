@@ -6,7 +6,10 @@ import type {
   FeynmanCommandExecution,
   FeynmanRuntimeStatus
 } from "../../src/review/index.js";
-import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
+import {
+  createResolvedTestUraniborgConfig,
+  createTestUraniborgConfig
+} from "../helpers/uraniborg-config.js";
 
 describe("runModelsCommand", () => {
   it("shows review model remediation guidance and configured revision defaults", async () => {
@@ -51,9 +54,9 @@ describe("runModelsCommand", () => {
       },
       async loadConfig() {
         return ok(
-          createTestUraniborgConfig({
+          createResolvedTestUraniborgConfig({
             profileId: "openai-codex-chatgpt",
-            credentialBinding: {
+            binding: {
               type: "pi-auth-storage",
               providerId: "openai-codex"
             },
@@ -79,6 +82,17 @@ describe("runModelsCommand", () => {
           })
         );
       },
+      authClient: {
+        async loginManagedCredential() {
+          throw new Error("Login should not run in models reporting.");
+        },
+        async resolveManagedCredential() {
+          throw new Error("Managed credential resolution should not run in models reporting.");
+        },
+        listAvailableModelIds() {
+          return ["gpt-5", "gpt-5.4"];
+        }
+      },
       writeLine(message) {
         lines.push(message);
       }
@@ -87,9 +101,11 @@ describe("runModelsCommand", () => {
     expect(lines).toContain(
       "[fail] Review model discovery is not ready through the selected Feynman runtime."
     );
-    expect(lines).toContain("[ok] Revision setup is ready.");
+    expect(lines).toContain("[ok] Revision runtime is ready.");
     expect(lines).toContain("Active profile: OpenAI/Codex");
     expect(lines).toContain("Default model: gpt-5");
+    expect(lines).toContain("Runtime auth: Pi-managed (openai-codex)");
+    expect(lines).toContain("- gpt-5");
     expect(lines.some((line) => line.includes("Recommended Capabilities"))).toBe(
       false
     );

@@ -9,11 +9,13 @@ import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 
 import {
+  createRevisionAuthClient,
   ensureUraniborgAppHome,
   isMarkdownFilePath,
   loadUraniborgConfig,
   resolvePathFromCwd,
-  resolveUraniborgPaths
+  resolveUraniborgPaths,
+  type RevisionAuthClient
 } from "../../config/index.js";
 import { executeRunLifecycle, type RunExecutionDependencies } from "../../loop/index.js";
 import {
@@ -60,7 +62,7 @@ export function registerRunCommand(program: Command): void {
     .option("--review-model <model>", "Review model exposed by embedded Feynman.")
     .option(
       "--refine-model <model>",
-      "Revision model name for the configured OpenAI-compatible endpoint."
+      "Revision model name for the active revision profile."
     )
     .option(
       "--non-interactive",
@@ -82,6 +84,7 @@ export interface RunCommandDependencies
   resolvePaths?: typeof resolveUraniborgPaths;
   ensureAppHome?: typeof ensureUraniborgAppHome;
   loadConfig?: typeof loadUraniborgConfig;
+  authClient?: RevisionAuthClient;
   inspectRuntime?: typeof inspectFeynmanRuntime;
   listModels?: typeof listFeynmanModels;
   getAlphaStatus?: typeof getFeynmanAlphaStatus;
@@ -151,6 +154,7 @@ export async function runRunCommand(
     resolvePaths: dependencies.resolvePaths ?? resolveUraniborgPaths,
     ensureAppHome: dependencies.ensureAppHome ?? ensureUraniborgAppHome,
     loadConfig: dependencies.loadConfig ?? loadUraniborgConfig,
+    authClient: dependencies.authClient ?? createRevisionAuthClient(),
     inspectRuntime: dependencies.inspectRuntime ?? inspectFeynmanRuntime,
     listModels: dependencies.listModels ?? listFeynmanModels,
     getAlphaStatus: dependencies.getAlphaStatus ?? getFeynmanAlphaStatus,
@@ -177,6 +181,7 @@ export async function runRunCommand(
         clock: dependencies.clock,
         filesystem: dependencies.filesystem,
         httpClient: dependencies.httpClient,
+        authClient: dependencies.authClient,
         runner,
         signal,
         writeLine
@@ -272,6 +277,7 @@ export async function prepareRunEnvironment(
     resolvePaths: typeof resolveUraniborgPaths;
     ensureAppHome: typeof ensureUraniborgAppHome;
     loadConfig: typeof loadUraniborgConfig;
+    authClient?: RevisionAuthClient | undefined;
     inspectRuntime: typeof inspectFeynmanRuntime;
     listModels: typeof listFeynmanModels;
     getAlphaStatus: typeof getFeynmanAlphaStatus;
@@ -281,6 +287,7 @@ export async function prepareRunEnvironment(
     writeLine: (message: string) => void;
   }
 ): Promise<PreparedRunEnvironment> {
+  const authClient = dependencies.authClient ?? createRevisionAuthClient();
   const paths = dependencies.resolvePaths();
 
   await dependencies.ensureAppHome(paths);
@@ -333,7 +340,9 @@ export async function prepareRunEnvironment(
 
   const configResult = await dependencies.loadConfig(
     paths.configFile,
-    dependencies.environment
+    dependencies.environment,
+    undefined,
+    authClient
   );
 
   if (!configResult.ok) {
@@ -392,6 +401,7 @@ export async function prepareRunEnvironment(
   );
   const refineModel = await selectRefineModel(
     configResult.value,
+    authClient,
     options.refineModel,
     {
       interactive: dependencies.interactive,
@@ -547,12 +557,70 @@ async function selectReviewModel(
 
 async function selectRefineModel(
   config: ResolvedUraniborgConfig,
+  authClient: RevisionAuthClient,
   requestedRefineModel: string | undefined,
   dependencies: {
     interactive: boolean;
     prompts: RunPrompts;
   }
 ): Promise<string> {
+  if (config.revision.runtime.kind === "pi-managed") {
+    const availableModels = [
+      ...(authClient.listAvailableModelIds?.(
+        config.revision.runtime.providerId
+      ) ?? [])
+    ]
+      .sort((left, right) => left.localeCompare(right));
+
+    if (availableModels.length === 0) {
+      throw new Error(
+        `No revision models are currently available for "${config.revision.profile.label}".`
+      );
+    }
+
+    if (typeof requestedRefineModel === "string" && requestedRefineModel.trim().length > 0) {
+      const modelId = requestedRefineModel.trim();
+
+      if (!availableModels.includes(modelId)) {
+        throw new Error(
+          `Selected revision model "${modelId}" is not available for "${config.revision.profile.label}". Available models: ${availableModels.join(", ")}`
+        );
+      }
+
+      return modelId;
+    }
+
+    if (!dependencies.interactive) {
+      if (availableModels.includes(config.refine.defaults.model)) {
+        return config.refine.defaults.model;
+      }
+
+      throw new Error(
+        `Non-interactive runs require --refine-model when the configured default model "${config.refine.defaults.model}" is not available for "${config.revision.profile.label}".`
+      );
+    }
+
+    const response = await dependencies.prompts.select({
+      message: `Which revision model for ${config.revision.profile.label}?`,
+      options: availableModels.map((model) => ({
+        value: model,
+        label: model
+      })),
+      ...(availableModels.includes(config.refine.defaults.model)
+        ? {
+            initialValue: config.refine.defaults.model
+          }
+        : {})
+    });
+
+    if (dependencies.prompts.isCancel(response)) {
+      dependencies.prompts.cancel("Uraniborg run cancelled.");
+      throw new Error("Uraniborg run cancelled.");
+    }
+
+    return response;
+  }
+
   if (typeof requestedRefineModel === "string" && requestedRefineModel.trim().length > 0) {
     return requestedRefineModel.trim();
   }

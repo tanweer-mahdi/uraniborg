@@ -333,6 +333,13 @@ export function resolveUraniborgConfigSecrets(
   if (credentialBinding.type === "stored-secret") {
     return ok({
       ...config,
+      revision: {
+        ...config.revision,
+        runtime: {
+          kind: "manual-compatible",
+          apiKey: credentialBinding.apiKey
+        }
+      },
       refine: {
         ...config.refine,
         endpoint: {
@@ -358,6 +365,13 @@ export function resolveUraniborgConfigSecrets(
 
     return ok({
       ...config,
+      revision: {
+        ...config.revision,
+        runtime: {
+          kind: "manual-compatible",
+          apiKey
+        }
+      },
       refine: {
         ...config.refine,
         endpoint: {
@@ -388,7 +402,8 @@ export function resolveRevisionSetupReadiness(
 export async function loadUraniborgConfig(
   configFilePath: string,
   environment: NodeJS.ProcessEnv = process.env,
-  readWriter: UraniborgConfigReadWriter = createNodeConfigReadWriter()
+  readWriter: UraniborgConfigReadWriter = createNodeConfigReadWriter(),
+  authClient: RevisionAuthClient = createRevisionAuthClient()
 ): Promise<Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>> {
   const parsedConfigResult = await loadParsedUraniborgConfig(
     configFilePath,
@@ -399,7 +414,11 @@ export async function loadUraniborgConfig(
     return parsedConfigResult;
   }
 
-  return resolveUraniborgConfigSecrets(parsedConfigResult.value, environment);
+  return resolveExecutableUraniborgConfig(
+    parsedConfigResult.value,
+    environment,
+    authClient
+  );
 }
 
 export async function loadParsedUraniborgConfig(
@@ -602,6 +621,97 @@ async function resolveRevisionSetupReadinessInternal(
     message: `Revision auth class "${config.revision.auth.class}" is not supported by Uraniborg readiness checks yet.`,
     details: [
       `The "${profile.label}" revision profile is configured with an auth path that this change does not bootstrap automatically.`
+    ]
+  });
+}
+
+async function resolveExecutableUraniborgConfig(
+  config: UraniborgConfig,
+  environment: NodeJS.ProcessEnv,
+  authClient: RevisionAuthClient
+): Promise<Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>> {
+  const readinessResult = await resolveRevisionSetupReadinessInternal(
+    config,
+    environment,
+    authClient
+  );
+
+  if (!readinessResult.ok) {
+    return readinessResult;
+  }
+
+  const credentialBinding = config.revision.credentialBinding;
+
+  if (credentialBinding.type === "stored-secret") {
+    return ok({
+      ...config,
+      revision: {
+        ...config.revision,
+        runtime: {
+          kind: "manual-compatible",
+          apiKey: credentialBinding.apiKey
+        }
+      },
+      refine: {
+        ...config.refine,
+        endpoint: {
+          ...config.refine.endpoint,
+          apiKey: credentialBinding.apiKey
+        }
+      }
+    });
+  }
+
+  if (credentialBinding.type === "env-var") {
+    const apiKey = environment[credentialBinding.envVar];
+
+    if (typeof apiKey !== "string" || apiKey.length === 0) {
+      return err({
+        code: "secret_missing",
+        message: `Environment variable "${credentialBinding.envVar}" is not set.`,
+        details: [
+          "Set the configured revision API key environment variable before running revision."
+        ]
+      });
+    }
+
+    return ok({
+      ...config,
+      revision: {
+        ...config.revision,
+        runtime: {
+          kind: "manual-compatible",
+          apiKey
+        }
+      },
+      refine: {
+        ...config.refine,
+        endpoint: {
+          ...config.refine.endpoint,
+          apiKey
+        }
+      }
+    });
+  }
+
+  if (credentialBinding.type === "pi-auth-storage") {
+    return ok({
+      ...config,
+      revision: {
+        ...config.revision,
+        runtime: {
+          kind: "pi-managed",
+          providerId: credentialBinding.providerId
+        }
+      }
+    });
+  }
+
+  return err({
+    code: "unsupported_auth_class",
+    message: `Revision auth class "${config.revision.auth.class}" is not runnable through Uraniborg runtime execution yet.`,
+    details: [
+      `The "${config.revision.profile.label}" revision profile is configured with an unsupported runtime auth path.`
     ]
   });
 }

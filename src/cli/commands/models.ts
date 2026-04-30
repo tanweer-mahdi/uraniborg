@@ -1,8 +1,9 @@
 import type { Command } from "commander";
 
 import {
+  createRevisionAuthClient,
   loadParsedUraniborgConfig,
-  loadRevisionSetupReadiness,
+  loadUraniborgConfig,
   resolveUraniborgPaths
 } from "../../config/index.js";
 import { getRevisionProfileLabel } from "../../config/revision-profiles.js";
@@ -19,10 +20,11 @@ import {
   type FeynmanRuntimeStatus
 } from "../../review/index.js";
 import type {
+  ResolvedUraniborgConfig,
   UraniborgConfig,
   UraniborgConfigLoadError
 } from "../../types/app-config.js";
-import type { Result } from "../../types/result.js";
+import { ok, type Result } from "../../types/result.js";
 import { writeInfo } from "../../ui/output.js";
 import {
   promptAndRunRemediations,
@@ -44,8 +46,9 @@ export interface ModelsCommandDependencies extends SharedRemediationDependencies
   listModels?: typeof listFeynmanModels;
   getAlphaStatus?: typeof getFeynmanAlphaStatus;
   getSearchStatus?: typeof getFeynmanSearchStatus;
-  loadConfig?: typeof loadRevisionSetupReadiness;
+  loadConfig?: typeof loadUraniborgConfig;
   loadParsedConfig?: typeof loadParsedUraniborgConfig;
+  authClient?: ReturnType<typeof createRevisionAuthClient>;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
   runner?: FeynmanCommandRunner;
@@ -56,6 +59,8 @@ interface ModelsReport {
   readinessReport: FeynmanReadinessReport;
   readinessConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
+  runtimeConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
+  availableRevisionModels: readonly string[];
 }
 
 export async function runModelsCommand(
@@ -94,9 +99,10 @@ export async function collectModelsReport(
     dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
     dependencies.getSearchStatus ?? getFeynmanSearchStatus;
-  const loadConfig = dependencies.loadConfig ?? loadRevisionSetupReadiness;
+  const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
   const loadParsedConfig =
     dependencies.loadParsedConfig ?? loadParsedUraniborgConfig;
+  const authClient = dependencies.authClient ?? createRevisionAuthClient();
   const runner = createSerializedFeynmanCommandRunner(
     dependencies.runner ?? createNodeFeynmanCommandRunner()
   );
@@ -112,16 +118,30 @@ export async function collectModelsReport(
     includeReviewModels: true
   });
 
-  const [readinessConfigResult, parsedConfigResult] = await Promise.all([
-    loadConfig(paths.configFile, dependencies.environment, undefined),
+  const [runtimeConfigResult, parsedConfigResult] = await Promise.all([
+    loadConfig(paths.configFile, dependencies.environment, undefined, authClient),
     loadParsedConfig(paths.configFile)
   ]);
+
+  const readinessConfigResult = runtimeConfigResult.ok
+    ? ok(runtimeConfigResult.value)
+    : parsedConfigResult.ok
+      ? ok(parsedConfigResult.value)
+      : runtimeConfigResult;
 
   return {
     runtimeStatus: snapshot.runtimeStatus,
     readinessReport: snapshot.readinessReport,
     readinessConfigResult,
-    parsedConfigResult
+    parsedConfigResult,
+    runtimeConfigResult,
+    availableRevisionModels:
+      runtimeConfigResult.ok &&
+        runtimeConfigResult.value.revision.runtime.kind === "pi-managed"
+        ? (authClient.listAvailableModelIds?.(
+            runtimeConfigResult.value.revision.runtime.providerId
+          ) ?? [])
+        : []
   };
 }
 
@@ -153,20 +173,34 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
     );
   }
 
-  lines.push("", "Revision");
+  lines.push("", "Revision Runtime");
 
-  if (report.readinessConfigResult.ok) {
+  if (report.runtimeConfigResult.ok) {
     lines.push(
-      `[ok] Revision setup is ready.`
+      `[ok] Revision runtime is ready.`
     );
-    lines.push(`Active profile: ${getRevisionProfileLabel(report.readinessConfigResult.value.revision.profile.id)}`);
-    lines.push(`Default model: ${report.readinessConfigResult.value.revision.defaults.model}`);
+    lines.push(`Active profile: ${getRevisionProfileLabel(report.runtimeConfigResult.value.revision.profile.id)}`);
+    lines.push(`Default model: ${report.runtimeConfigResult.value.revision.defaults.model}`);
+
+    if (report.runtimeConfigResult.value.revision.runtime.kind === "pi-managed") {
+      lines.push(
+        `Runtime auth: Pi-managed (${report.runtimeConfigResult.value.revision.runtime.providerId})`
+      );
+
+      for (const model of report.availableRevisionModels) {
+        lines.push(`- ${model}`);
+      }
+    } else {
+      lines.push(
+        `Compatible endpoint: ${report.runtimeConfigResult.value.refine.endpoint.baseUrl}`
+      );
+    }
   } else if (report.parsedConfigResult.ok) {
-    lines.push(`[fail] ${report.readinessConfigResult.error.message}`);
+    lines.push(`[fail] ${report.runtimeConfigResult.error.message}`);
     lines.push(`Active profile: ${getRevisionProfileLabel(report.parsedConfigResult.value.revision.profile.id)}`);
     lines.push(`Default model: ${report.parsedConfigResult.value.revision.defaults.model}`);
 
-    for (const detail of report.readinessConfigResult.error.details ?? []) {
+    for (const detail of report.runtimeConfigResult.error.details ?? []) {
       lines.push(`  ${detail}`);
     }
   } else {

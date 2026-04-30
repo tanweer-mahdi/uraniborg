@@ -7,7 +7,7 @@ import type {
   FeynmanRuntimeStatus
 } from "../../src/review/index.js";
 import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
-import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
+import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runDoctorCommand", () => {
   it("reports recommended capability gaps and surfaces feynman doctor diagnostics", async () => {
@@ -53,11 +53,12 @@ describe("runDoctorCommand", () => {
       },
       async loadConfig() {
         return ok(
-          createTestUraniborgConfig({
+          createResolvedTestUraniborgConfig({
             profileId: "manual-openai-compatible",
-            credentialBinding: {
+            binding: {
               type: "env-var",
-              envVar: "OPENAI_API_KEY"
+              envVar: "OPENAI_API_KEY",
+              resolvedApiKey: "secret"
             },
             model: "gpt-5",
             baseUrl: "https://api.example.com/v1"

@@ -77,12 +77,26 @@ export interface UraniborgConfig {
 
 export interface ResolvedUraniborgRefineEndpointConfig
   extends UraniborgRefineEndpointConfig {
-  apiKey: string;
+  apiKey?: string | undefined;
+}
+
+export type UraniborgRevisionRuntime =
+  | {
+      kind: "manual-compatible";
+      apiKey: string;
+    }
+  | {
+      kind: "pi-managed";
+      providerId: string;
+    };
+
+export interface ResolvedUraniborgRevisionConfig extends UraniborgRevisionConfig {
+  runtime: UraniborgRevisionRuntime;
 }
 
 export interface ResolvedUraniborgConfig {
   version: 3;
-  revision: UraniborgRevisionConfig;
+  revision: ResolvedUraniborgRevisionConfig;
   refine: {
     endpoint: ResolvedUraniborgRefineEndpointConfig;
     defaults: UraniborgRevisionDefaults;
@@ -99,6 +113,7 @@ export type UraniborgConfigLoadErrorCode =
   | "managed_credential_missing"
   | "managed_credential_unreadable"
   | "provider_context_missing"
+  | "model_unavailable"
   | "unsupported_auth_class";
 
 export interface UraniborgConfigLoadError {

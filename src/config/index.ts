@@ -19,7 +19,8 @@ export {
   createNodeRevisionBrowserLauncher,
   createRevisionAuthClient,
   type RevisionAuthClient,
-  type RevisionBrowserLauncher
+  type RevisionBrowserLauncher,
+  type UraniborgRevisionManagedModelResolution
 } from "./revision-auth.js";
 export {
   isMarkdownFilePath,

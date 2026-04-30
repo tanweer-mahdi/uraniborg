@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import type { OAuthLoginCallbacks } from "@mariozechner/pi-ai";
 
@@ -8,6 +9,15 @@ import { err, ok, type Result } from "../types/result.js";
 
 export interface UraniborgRevisionManagedCredentialState {
   providerId: string;
+  accountId?: string | undefined;
+  projectId?: string | undefined;
+}
+
+export interface UraniborgRevisionManagedModelResolution {
+  providerId: string;
+  model: Model<Api>;
+  apiKey: string;
+  headers?: Record<string, string> | undefined;
   accountId?: string | undefined;
   projectId?: string | undefined;
 }
@@ -26,6 +36,13 @@ export interface RevisionAuthClient {
   ): Promise<
     Result<UraniborgRevisionManagedCredentialState, UraniborgConfigLoadError>
   >;
+  resolveManagedModel?(
+    providerId: string,
+    modelId: string
+  ): Promise<
+    Result<UraniborgRevisionManagedModelResolution, UraniborgConfigLoadError>
+  > | undefined;
+  listAvailableModelIds?(providerId: string): readonly string[];
 }
 
 class PiRevisionAuthClient implements RevisionAuthClient {
@@ -102,6 +119,67 @@ class PiRevisionAuthClient implements RevisionAuthClient {
       accountId: readOptionalCredentialField(credential, "accountId"),
       projectId: readOptionalCredentialField(credential, "projectId")
     });
+  }
+
+  async resolveManagedModel(
+    providerId: string,
+    modelId: string
+  ): Promise<
+    Result<UraniborgRevisionManagedModelResolution, UraniborgConfigLoadError>
+  > {
+    const credentialState = await this.resolveManagedCredential(providerId);
+
+    if (!credentialState.ok) {
+      return credentialState;
+    }
+
+    const model = this.modelRegistry.find(providerId, modelId);
+
+    if (model === undefined) {
+      return err({
+        code: "model_unavailable",
+        message: `Revision model "${modelId}" is not available for provider "${providerId}".`,
+        details: [
+          "Run `uraniborg models` to inspect the revision models available for the active profile."
+        ]
+      });
+    }
+
+    const requestAuth = await this.modelRegistry.getApiKeyAndHeaders(model);
+    const followUpErrors = this.authStorage.drainErrors();
+
+    if (followUpErrors.length > 0) {
+      return err(
+        createUnreadableManagedCredentialError(providerId, followUpErrors)
+      );
+    }
+
+    if (!requestAuth.ok || typeof requestAuth.apiKey !== "string" || requestAuth.apiKey.length === 0) {
+      return err({
+        code: "managed_credential_unreadable",
+        message: `Pi-managed credential state for "${providerId}" is not currently usable for model "${modelId}".`,
+        details: [
+          ...(requestAuth.ok ? [] : [requestAuth.error]),
+          "Run `uraniborg revision --setup` again to refresh the managed browser-login credential."
+        ]
+      });
+    }
+
+    return ok({
+      providerId,
+      model,
+      apiKey: requestAuth.apiKey,
+      headers: requestAuth.headers,
+      accountId: credentialState.value.accountId,
+      projectId: credentialState.value.projectId
+    });
+  }
+
+  listAvailableModelIds(providerId: string): readonly string[] {
+    return this.modelRegistry
+      .getAvailable()
+      .filter((model) => model.provider === providerId)
+      .map((model) => model.id);
   }
 }
 

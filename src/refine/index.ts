@@ -2,7 +2,7 @@ export {
   URANIBORG_REFINEMENT_SYSTEM_PROMPT,
   buildRefinePrompt,
   createFetchRefineHttpClient,
-  executeRefinement,
+  executeManualCompatibleRefinement,
   parseRefineApiResponse,
   parseRefinementOutput,
   type ExecuteRefinementInput,
@@ -16,3 +16,5 @@ export {
   type RefinePrompt,
   type RefinePromptInput
 } from "./refinement.js";
+export { type ExecuteRefinementDependencies } from "./execution.js";
+export { executeRefinement } from "./execution.js";

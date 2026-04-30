@@ -28,6 +28,7 @@ export interface IterationArtifactPaths {
   changesFile: string;
   reviewLogFile: string;
   refineLogFile: string;
+  refineResponseFile: string;
 }
 
 export function createNodeRunFilesystem(): RunFilesystem {
@@ -77,7 +78,8 @@ export function resolveIterationArtifactPaths(
     refinedDraftFile: path.join(iterationDirectory, "refined.md"),
     changesFile: path.join(iterationDirectory, "changes.md"),
     reviewLogFile: path.join(iterationDirectory, "review.log"),
-    refineLogFile: path.join(iterationDirectory, "refine.log")
+    refineLogFile: path.join(iterationDirectory, "refine.log"),
+    refineResponseFile: path.join(iterationDirectory, "refine.response.txt")
   };
 }
 

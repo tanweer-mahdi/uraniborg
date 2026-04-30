@@ -1,8 +1,9 @@
 import type { Command } from "commander";
 
 import {
+  createRevisionAuthClient,
   ensureUraniborgAppHome,
-  loadRevisionSetupReadiness,
+  loadUraniborgConfig,
   resolveUraniborgPaths
 } from "../../config/index.js";
 import { getRevisionProfileLabel } from "../../config/revision-profiles.js";
@@ -21,6 +22,7 @@ import {
 } from "../../review/index.js";
 import type { Result } from "../../types/result.js";
 import type {
+  ResolvedUraniborgConfig,
   UraniborgConfig,
   UraniborgConfigLoadError
 } from "../../types/app-config.js";
@@ -47,7 +49,8 @@ export interface DoctorCommandDependencies extends SharedRemediationDependencies
   listModels?: typeof listFeynmanModels;
   getAlphaStatus?: typeof getFeynmanAlphaStatus;
   getSearchStatus?: typeof getFeynmanSearchStatus;
-  loadConfig?: typeof loadRevisionSetupReadiness;
+  loadConfig?: typeof loadUraniborgConfig;
+  authClient?: ReturnType<typeof createRevisionAuthClient>;
   writeLine?: (message: string) => void;
   environment?: NodeJS.ProcessEnv;
   runner?: FeynmanCommandRunner;
@@ -57,7 +60,7 @@ interface DoctorReport {
   appHomeStatus: UraniborgAppHomeStatus;
   runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
-  revisionConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
+  revisionConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
 }
 
 export async function runDoctorCommand(
@@ -121,10 +124,11 @@ export async function collectDoctorReport(
     dependencies.getAlphaStatus ?? getFeynmanAlphaStatus;
   const getSearchStatus =
     dependencies.getSearchStatus ?? getFeynmanSearchStatus;
-  const loadConfig = dependencies.loadConfig ?? loadRevisionSetupReadiness;
+  const loadConfig = dependencies.loadConfig ?? loadUraniborgConfig;
   const runner = createSerializedFeynmanCommandRunner(
     dependencies.runner ?? createNodeFeynmanCommandRunner()
   );
+  const authClient = dependencies.authClient ?? createRevisionAuthClient();
 
   const paths = resolvePaths();
   const appHomeStatus = await ensureAppHome(paths);
@@ -142,7 +146,8 @@ export async function collectDoctorReport(
   const revisionConfigResult = await loadConfig(
     paths.configFile,
     dependencies.environment,
-    undefined
+    undefined,
+    authClient
   );
 
   return {
@@ -178,13 +183,13 @@ export function renderDoctorReport(report: DoctorReport): readonly string[] {
     }
   }
 
-  lines.push("", "Revision Readiness");
+  lines.push("", "Revision Runtime");
 
   if (report.revisionConfigResult.ok) {
     lines.push(
       formatStatusLine(
         true,
-        `Revision setup is ready. Profile: ${getRevisionProfileLabel(report.revisionConfigResult.value.revision.profile.id)}. Model: ${report.revisionConfigResult.value.revision.defaults.model}.`,
+        `Revision runtime is ready. Profile: ${getRevisionProfileLabel(report.revisionConfigResult.value.revision.profile.id)}. Model: ${report.revisionConfigResult.value.revision.defaults.model}.`,
         ""
       )
     );

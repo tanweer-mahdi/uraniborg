@@ -9,6 +9,7 @@ import {
   type RefineError,
   type RefineHttpClient
 } from "../refine/index.js";
+import type { RevisionAuthClient } from "../config/revision-auth.js";
 import {
   createFreshReviewWorkspace,
   executeReviewAndNormalize,
@@ -64,6 +65,7 @@ export interface RunExecutionDependencies {
   clock?: RunExecutionClock | undefined;
   filesystem?: ReviewFilesystem | undefined;
   httpClient?: RefineHttpClient | undefined;
+  authClient?: RevisionAuthClient | undefined;
   runner?: FeynmanCommandRunner | undefined;
   signal?: AbortSignal | undefined;
   writeLine?: ((message: string) => void) | undefined;
@@ -250,6 +252,7 @@ async function continueRunLifecycle(
           clock,
           filesystem,
           httpClient: dependencies.httpClient,
+          authClient: dependencies.authClient,
           runner: dependencies.runner,
           signal: dependencies.signal,
           writeLine
@@ -304,6 +307,7 @@ async function executeSingleIteration(
     writeLine: (message: string) => void;
     filesystem?: ReviewFilesystem | undefined;
     httpClient?: RefineHttpClient | undefined;
+    authClient?: RevisionAuthClient | undefined;
     runner?: FeynmanCommandRunner | undefined;
     signal?: AbortSignal | undefined;
   }
@@ -463,6 +467,7 @@ async function executeRefinePhase(
     writeLine: (message: string) => void;
     filesystem?: ReviewFilesystem | undefined;
     httpClient?: RefineHttpClient | undefined;
+    authClient?: RevisionAuthClient | undefined;
     signal?: AbortSignal | undefined;
   }
 ): Promise<void> {
@@ -501,7 +506,10 @@ async function executeRefinePhase(
       model: input.selectedModels.refine,
       signal: dependencies.signal
     },
-    dependencies.httpClient
+    {
+      httpClient: dependencies.httpClient,
+      authClient: dependencies.authClient
+    }
   );
 
   if (!refinementResult.ok) {
@@ -514,20 +522,26 @@ async function executeRefinePhase(
       throw createOperationCancelledError(refinementResult.error.message);
     }
 
+    const surfacedRefinementError = await createSurfacedRefinementError(
+      refinementResult.error,
+      iterationArtifacts,
+      dependencies.filesystem
+    );
+
     await writeArtifactFile(
       iterationArtifacts.refineLogFile,
-      formatRefinementFailureLog(refinementResult.error),
+      formatRefinementFailureLog(surfacedRefinementError, iterationArtifacts),
       dependencies.filesystem
     );
     await persistRunFailure(
       input.manifestPath,
       ["refine_running"],
       input.iterationNumber,
-      refinementResult.error,
+      surfacedRefinementError,
       dependencies.clock.now().toISOString(),
       dependencies.filesystem
     );
-    throw new Error(refinementResult.error.message);
+    throw new Error(surfacedRefinementError.message);
   }
 
   await writeArtifactFile(
@@ -953,23 +967,47 @@ function throwIfCancelled(signal: AbortSignal | undefined): void {
 
 function formatRefinementLog(executedRefinement: ExecutedRefinement): string {
   return [
-    `Request URL: ${executedRefinement.requestUrl}`,
+    `Provider: ${executedRefinement.provider}`,
+    `Model: ${executedRefinement.model}`,
+    ...(typeof executedRefinement.responseId === "string"
+      ? [`Response ID: ${executedRefinement.responseId}`]
+      : []),
+    ...(typeof executedRefinement.stopReason === "string"
+      ? [`Stop reason: ${executedRefinement.stopReason}`]
+      : []),
     "",
-    "=== REQUEST BODY ===",
-    executedRefinement.requestBody,
+    "=== REQUEST ===",
+    executedRefinement.requestLog,
     "",
-    "=== RESPONSE BODY ===",
-    executedRefinement.responseBody
+    "=== RESPONSE ===",
+    executedRefinement.responseLog
   ].join("\n");
 }
 
-function formatRefinementFailureLog(error: RefineError): string {
+function formatRefinementFailureLog(
+  error: RefineError,
+  iterationArtifacts?: IterationArtifactPaths
+): string {
   return [
+    ...(typeof error.provider === "string" ? [`Provider: ${error.provider}`] : []),
+    ...(typeof error.model === "string" ? [`Model: ${error.model}`] : []),
+    ...(typeof error.responseId === "string" ? [`Response ID: ${error.responseId}`] : []),
+    ...(typeof error.stopReason === "string" ? [`Stop reason: ${error.stopReason}`] : []),
     `Error code: ${error.code}`,
     `Message: ${error.message}`,
     ...(typeof error.status === "number" ? [`HTTP status: ${error.status}`] : []),
+    ...(typeof iterationArtifacts?.refineResponseFile === "string" &&
+    typeof error.rawOutput === "string"
+      ? [`Malformed response artifact: ${iterationArtifacts.refineResponseFile}`]
+      : []),
     ...(error.details !== undefined && error.details.length > 0
       ? ["Details:", ...error.details]
+      : []),
+    ...(typeof error.requestLog === "string"
+      ? ["", "=== REQUEST ===", error.requestLog]
+      : []),
+    ...(typeof error.responseLog === "string"
+      ? ["", "=== RESPONSE ===", error.responseLog]
       : [])
   ].join("\n");
 }
@@ -986,4 +1024,25 @@ function formatCancelledRefinementLog(error: RefineError): string {
     `Error code: ${error.code}`,
     `Message: ${error.message}`
   ].join("\n");
+}
+
+async function createSurfacedRefinementError(
+  error: RefineError,
+  iterationArtifacts: IterationArtifactPaths,
+  filesystem?: ReviewFilesystem
+): Promise<RefineError> {
+  if (error.code !== "refine_output_invalid" || typeof error.rawOutput !== "string") {
+    return error;
+  }
+
+  await writeArtifactFile(
+    iterationArtifacts.refineResponseFile,
+    error.rawOutput,
+    filesystem
+  );
+
+  return {
+    ...error,
+    message: `${error.message} See ${iterationArtifacts.refineResponseFile} for the raw refinement response.`
+  };
 }

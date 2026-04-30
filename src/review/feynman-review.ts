@@ -203,9 +203,12 @@ export async function executeReviewAndNormalize(
   );
 
   if (execution.exitCode !== 0) {
+    const providerMessage = extractProviderReviewFailureMessage(execution.stderr);
     const failure = createReviewFailure({
       code: "review_process_failed",
-      message: `Pinned Feynman review exited with code ${execution.exitCode} during iteration ${input.iterationNumber}.`,
+      message:
+        providerMessage ??
+        `Pinned Feynman review exited with code ${execution.exitCode} during iteration ${input.iterationNumber}.`,
       details: execution.stderr.trim().length > 0 ? [execution.stderr.trim()] : undefined,
       exitCode: execution.exitCode
     });
@@ -264,6 +267,51 @@ export async function executeReviewAndNormalize(
     externalReviewFile: reviewArtifactResult.value,
     reviewLogFile: input.reviewLogFile
   });
+}
+
+function extractProviderReviewFailureMessage(stderr: string): string | undefined {
+  const trimmedStderr = stderr.trim();
+
+  if (trimmedStderr.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmedStderr) as unknown;
+    const message = extractMessageFromUnknown(parsed);
+
+    if (typeof message === "string" && message.trim().length > 0) {
+      return message.trim();
+    }
+  } catch {
+    // Fall through to plain-text extraction.
+  }
+
+  const firstNonEmptyLine = trimmedStderr
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  return firstNonEmptyLine;
+}
+
+function extractMessageFromUnknown(input: unknown): string | undefined {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  if (typeof input !== "object" || input === null) {
+    return undefined;
+  }
+
+  const candidate = input as Record<string, unknown>;
+  const directMessage = candidate["detail"] ?? candidate["message"] ?? candidate["error"];
+
+  if (typeof directMessage === "string") {
+    return directMessage;
+  }
+
+  return undefined;
 }
 
 export async function discoverNewReviewArtifact(

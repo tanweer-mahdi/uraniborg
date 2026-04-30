@@ -8,6 +8,7 @@ import {
 import type { Command } from "commander";
 
 import {
+  createRevisionAuthClient,
   ensureUraniborgAppHome,
   loadUraniborgConfig,
   resolveUraniborgPaths
@@ -54,6 +55,7 @@ export async function runResumeCommand(
   dependencies: RunCommandDependencies = {}
 ): Promise<void> {
   const writeLine = dependencies.writeLine ?? writeInfo;
+  const authClient = dependencies.authClient ?? createRevisionAuthClient();
   const runner = createSerializedFeynmanCommandRunner(
     dependencies.runner ?? createNodeFeynmanCommandRunner()
   );
@@ -98,6 +100,7 @@ export async function runResumeCommand(
       resolvePaths: dependencies.resolvePaths ?? resolveUraniborgPaths,
       ensureAppHome: dependencies.ensureAppHome ?? ensureUraniborgAppHome,
       loadConfig: dependencies.loadConfig ?? loadUraniborgConfig,
+      authClient,
       inspectRuntime: dependencies.inspectRuntime ?? inspectFeynmanRuntime,
       listModels: dependencies.listModels ?? listFeynmanModels,
       getAlphaStatus: dependencies.getAlphaStatus ?? getFeynmanAlphaStatus,
@@ -122,6 +125,7 @@ export async function runResumeCommand(
         clock: dependencies.clock,
         filesystem: dependencies.filesystem,
         httpClient: dependencies.httpClient,
+        authClient,
         runner,
         signal,
         writeLine

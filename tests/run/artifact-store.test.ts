@@ -31,7 +31,8 @@ describe("artifact store", () => {
       refinedDraftFile: "/tmp/runs/2026-run/iter-2/refined.md",
       changesFile: "/tmp/runs/2026-run/iter-2/changes.md",
       reviewLogFile: "/tmp/runs/2026-run/iter-2/review.log",
-      refineLogFile: "/tmp/runs/2026-run/iter-2/refine.log"
+      refineLogFile: "/tmp/runs/2026-run/iter-2/refine.log",
+      refineResponseFile: "/tmp/runs/2026-run/iter-2/refine.response.txt"
     });
   });
 

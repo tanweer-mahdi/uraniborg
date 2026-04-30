@@ -222,6 +222,74 @@ describe("review workspace", () => {
     expect(updatedManifest.lastError?.code).toBe("review_process_failed");
   });
 
+  it("surfaces provider-authored review errors instead of generic exit-code wrappers", async () => {
+    const temporaryRoot = await createTemporaryRoot(temporaryRoots);
+    const runArtifacts = resolveRunArtifactPaths(temporaryRoot, "2026-run");
+    const manifest = createReviewRunningManifest(runArtifacts);
+
+    await mkdir(path.join(runArtifacts.runDirectory, "iter-1"), { recursive: true });
+    await writeRunManifest(
+      runArtifacts.manifestFile,
+      manifest,
+      createNodeReviewFilesystem()
+    );
+
+    const workspace = await createFreshReviewWorkspace(
+      path.join(runArtifacts.runDirectory, "iter-1")
+    );
+    const runner: FeynmanCommandRunner = {
+      async run(
+        executablePath: string,
+        args: readonly string[]
+      ): Promise<FeynmanCommandExecution> {
+        return {
+          executablePath,
+          args,
+          exitCode: 1,
+          stdout: "",
+          stderr:
+            '{"detail":"The \\"gpt-5.1\\" model is not supported when using Codex with a ChatGPT account."}'
+        };
+      }
+    };
+
+    const result = await executeReviewAndNormalize(
+      {
+        executablePath: "/tmp/vendor/feynman/bin/feynman",
+        reviewModel: "openai-codex/gpt-5.1",
+        reviewWorkspace: workspace,
+        reviewLogFile: path.join(runArtifacts.runDirectory, "iter-1", "review.log"),
+        normalizedReviewFile: path.join(runArtifacts.runDirectory, "iter-1", "review.md"),
+        manifestPath: runArtifacts.manifestFile,
+        iterationNumber: 1,
+        failureTimestamp: "2026-04-23T08:00:00.000Z"
+      },
+      runner,
+      createNodeReviewFilesystem()
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected review execution to fail.");
+    }
+
+    expect(result.error.message).toBe(
+      'The "gpt-5.1" model is not supported when using Codex with a ChatGPT account.'
+    );
+    await expect(
+      readFile(path.join(runArtifacts.runDirectory, "iter-1", "review.log"), "utf8")
+    ).resolves.toContain("exitCode: 1");
+
+    const updatedManifest = await readRunManifest(
+      runArtifacts.manifestFile,
+      createNodeReviewFilesystem()
+    );
+
+    expect(updatedManifest.lastError?.message).toBe(
+      'The "gpt-5.1" model is not supported when using Codex with a ChatGPT account.'
+    );
+  });
+
   it("fails closed when artifact attribution remains ambiguous", async () => {
     const temporaryRoot = await createTemporaryRoot(temporaryRoots);
     const runArtifacts = resolveRunArtifactPaths(temporaryRoot, "2026-run");

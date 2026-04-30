@@ -98,7 +98,12 @@ describe("run manifest", () => {
       }
     });
 
-    expect(snapshot.refineEndpoint).toEqual({
+    expect(snapshot.revisionRuntime).toEqual({
+      profileId: "manual-openai-compatible",
+      profileLabel: "Manual OpenAI-compatible",
+      authClass: "api-key",
+      acquisition: "env-var",
+      credentialBindingType: "env-var",
       baseUrl: "https://api.example.com/v1",
       apiKeyConfigured: true,
       timeoutMs: 60000
@@ -125,7 +130,12 @@ describe("run manifest", () => {
           model: "gpt-5",
           temperature: 0.2
         },
-        refineEndpoint: {
+        revisionRuntime: {
+          profileId: "manual-openai-compatible",
+          profileLabel: "Manual OpenAI-compatible",
+          authClass: "api-key",
+          acquisition: "env-var",
+          credentialBindingType: "env-var",
           baseUrl: "https://api.example.com/v1",
           apiKeyConfigured: true,
           timeoutMs: 60000

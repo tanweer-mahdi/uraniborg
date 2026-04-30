@@ -90,6 +90,10 @@ export function createResolvedTestUraniborgConfig(options: {
         type: "env-var";
         envVar: string;
         resolvedApiKey: string;
+      }
+    | {
+        type: "pi-auth-storage";
+        providerId: string;
       };
   model: string;
   temperature?: number;
@@ -106,10 +110,15 @@ export function createResolvedTestUraniborgConfig(options: {
             type: "stored-secret",
             apiKey: options.binding.apiKey
           }
-        : {
-          type: "env-var",
-          envVar: options.binding.envVar
-        },
+        : options.binding.type === "env-var"
+          ? {
+              type: "env-var",
+              envVar: options.binding.envVar
+            }
+          : {
+              type: "pi-auth-storage",
+              providerId: options.binding.providerId
+            },
     model: options.model,
     ...(typeof options.temperature === "number"
       ? {
@@ -140,14 +149,34 @@ export function createResolvedTestUraniborgConfig(options: {
 
   return {
     ...config,
+    revision: {
+      ...config.revision,
+      runtime:
+        options.binding.type === "pi-auth-storage"
+          ? {
+              kind: "pi-managed",
+              providerId: options.binding.providerId
+            }
+          : {
+              kind: "manual-compatible",
+              apiKey:
+                options.binding.type === "stored-secret"
+                  ? options.binding.apiKey
+                  : options.binding.resolvedApiKey
+            }
+    },
     refine: {
       ...config.refine,
       endpoint: {
         ...config.refine.endpoint,
-        apiKey:
-          options.binding.type === "stored-secret"
-            ? options.binding.apiKey
-            : options.binding.resolvedApiKey
+        ...(options.binding.type === "pi-auth-storage"
+          ? {}
+          : {
+              apiKey:
+                options.binding.type === "stored-secret"
+                  ? options.binding.apiKey
+                  : options.binding.resolvedApiKey
+            })
       }
     }
   };

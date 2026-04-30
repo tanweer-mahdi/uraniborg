@@ -84,10 +84,19 @@ export interface RunConfigSnapshot {
     temperature: number;
     maxOutputTokens?: number | undefined;
   };
-  refineEndpoint: {
+  revisionRuntime: {
+    profileId: string;
+    profileLabel: string;
+    authClass: string;
+    acquisition: string;
+    credentialBindingType: string;
     baseUrl: string;
-    apiKeyConfigured: boolean;
     timeoutMs: number;
+    apiKeyConfigured?: boolean | undefined;
+    providerContext?: {
+      accountId?: string | undefined;
+      projectId?: string | undefined;
+    } | undefined;
   };
 }
 
@@ -191,10 +200,24 @@ export function createRunConfigSnapshot(input: {
         ? { maxOutputTokens: input.config.refine.defaults.maxOutputTokens }
         : {})
     },
-    refineEndpoint: {
+    revisionRuntime: {
+      profileId: input.config.revision.profile.id,
+      profileLabel: input.config.revision.profile.label,
+      authClass: input.config.revision.auth.class,
+      acquisition: input.config.revision.auth.acquisition,
+      credentialBindingType: input.config.revision.credentialBinding.type,
       baseUrl: input.config.refine.endpoint.baseUrl,
-      apiKeyConfigured: input.config.refine.endpoint.apiKey.length > 0,
-      timeoutMs: input.config.refine.endpoint.timeoutMs
+      timeoutMs: input.config.refine.endpoint.timeoutMs,
+      ...(input.config.revision.runtime.kind === "manual-compatible"
+        ? {
+            apiKeyConfigured: input.config.revision.runtime.apiKey.length > 0
+          }
+        : {}),
+      ...(input.config.revision.providerContext === undefined
+        ? {}
+        : {
+            providerContext: input.config.revision.providerContext
+          })
     }
   };
 }

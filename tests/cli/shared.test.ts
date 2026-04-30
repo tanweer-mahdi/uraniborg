@@ -9,7 +9,7 @@ import {
 } from "../../src/review/index.js";
 import { ok } from "../../src/types/result.js";
 import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
-import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
+import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("promptAndRunRemediations", () => {
   it("launches the dedicated web-search command after provider selection", async () => {
@@ -141,9 +141,9 @@ describe("runDoctorCommand", () => {
       },
       async loadConfig() {
         return ok(
-          createTestUraniborgConfig({
+          createResolvedTestUraniborgConfig({
             profileId: "manual-openai-compatible",
-            credentialBinding: {
+            binding: {
               type: "stored-secret",
               apiKey: "secret"
             },

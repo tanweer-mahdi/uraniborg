@@ -89,6 +89,13 @@ export interface RefineError {
   message: string;
   details?: readonly string[] | undefined;
   status?: number | undefined;
+  provider?: string | undefined;
+  model?: string | undefined;
+  requestLog?: string | undefined;
+  responseLog?: string | undefined;
+  responseId?: string | undefined;
+  stopReason?: "stop" | "length" | "aborted" | "error" | undefined;
+  rawOutput?: string | undefined;
 }
 
 export interface RefineHttpResponse {
@@ -116,10 +123,12 @@ export interface ExecuteRefinementInput extends RefinePromptInput {
 }
 
 export interface ExecutedRefinement {
-  requestUrl: string;
-  requestBody: string;
-  responseBody: string;
-  apiResponse: RefineApiResponse;
+  provider: string;
+  model: string;
+  requestLog: string;
+  responseLog: string;
+  responseId?: string | undefined;
+  stopReason?: "stop" | "length" | "aborted" | "error" | undefined;
   parsedOutput: ParsedRefinementOutput;
 }
 
@@ -194,7 +203,7 @@ export function parseRefinementOutput(
   });
 }
 
-export async function executeRefinement(
+export async function executeManualCompatibleRefinement(
   input: ExecuteRefinementInput,
   httpClient: RefineHttpClient = createFetchRefineHttpClient()
 ): Promise<Result<ExecutedRefinement, RefineError>> {
@@ -243,11 +252,24 @@ export async function executeRefinement(
   }, input.config.refine.endpoint.timeoutMs);
 
   try {
+    const apiKey = input.config.revision.runtime.kind === "manual-compatible"
+      ? input.config.revision.runtime.apiKey
+      : input.config.refine.endpoint.apiKey;
+
+    if (typeof apiKey !== "string" || apiKey.length === 0) {
+      return err(
+        createRefineError({
+          code: "refine_http_error",
+          message: "Manual-compatible refinement runtime did not resolve an API key."
+        })
+      );
+    }
+
     const response = await httpClient.fetch(requestUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${input.config.refine.endpoint.apiKey}`
+        authorization: `Bearer ${apiKey}`
       },
       body: requestBody,
       signal: abortController.signal
@@ -274,14 +296,27 @@ export async function executeRefinement(
     const parsedOutput = parseRefinementOutput(parsedApiResponse.value.content);
 
     if (!parsedOutput.ok) {
-      return parsedOutput;
+      return err(
+        createRefineError({
+          ...parsedOutput.error,
+          provider: "manual-openai-compatible",
+          model: input.model,
+          requestLog: [`Request URL: ${requestUrl}`, "", requestBody].join("\n"),
+          responseLog: responseBody,
+          responseId: parsedApiResponse.value.id,
+          stopReason: "stop",
+          rawOutput: parsedApiResponse.value.content
+        })
+      );
     }
 
     return ok({
-      requestUrl,
-      requestBody,
-      responseBody,
-      apiResponse: parsedApiResponse.value,
+      provider: "manual-openai-compatible",
+      model: input.model,
+      requestLog: [`Request URL: ${requestUrl}`, "", requestBody].join("\n"),
+      responseLog: responseBody,
+      responseId: parsedApiResponse.value.id,
+      stopReason: "stop",
       parsedOutput: parsedOutput.value
     });
   } catch (error) {
@@ -415,6 +450,13 @@ function createRefineError(input: RefineError): RefineError {
     code: input.code,
     message: input.message,
     ...(input.details !== undefined ? { details: input.details } : {}),
-    ...(input.status !== undefined ? { status: input.status } : {})
+    ...(input.status !== undefined ? { status: input.status } : {}),
+    ...(input.provider !== undefined ? { provider: input.provider } : {}),
+    ...(input.model !== undefined ? { model: input.model } : {}),
+    ...(input.requestLog !== undefined ? { requestLog: input.requestLog } : {}),
+    ...(input.responseLog !== undefined ? { responseLog: input.responseLog } : {}),
+    ...(input.responseId !== undefined ? { responseId: input.responseId } : {}),
+    ...(input.stopReason !== undefined ? { stopReason: input.stopReason } : {}),
+    ...(input.rawOutput !== undefined ? { rawOutput: input.rawOutput } : {})
   };
 }
