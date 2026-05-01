@@ -4,6 +4,7 @@ import { Box, Text, useApp, useInput } from "ink";
 import { runResumeCommand } from "../cli/commands/resume.js";
 import { runRunCommand } from "../cli/commands/run.js";
 import { FooterHelp, MenuList, ShellFrame } from "./components.js";
+import { UraniborgLogo } from "./logo.js";
 import { DoctorScreen } from "./screens/doctor.js";
 import { HistoryScreen } from "./screens/history.js";
 import { ModelsScreen } from "./screens/models.js";
@@ -146,6 +147,7 @@ export function UraniborgTuiApp(props: {
 
   return (
     <ShellFrame
+      masthead={<UraniborgLogo />}
       title={renderRouteTitle(route)}
       footer={
         route.kind === "dashboard" ? (

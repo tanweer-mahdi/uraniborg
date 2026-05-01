@@ -4,11 +4,15 @@ import { Box, Text } from "ink";
 export function ShellFrame(props: {
   title: string;
   subtitle?: string | undefined;
+  masthead?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <Box flexDirection="column" padding={1}>
+      {props.masthead === undefined ? null : (
+        <Box flexDirection="column">{props.masthead}</Box>
+      )}
       <Box flexDirection="column" marginBottom={1}>
         <Text bold color="cyan">
           {props.title}

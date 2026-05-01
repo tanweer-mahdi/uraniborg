@@ -19,6 +19,7 @@ describe("UraniborgTuiApp shell", () => {
     const frame = app.lastFrame();
 
     expect(frame).toContain("Uraniborg");
+    expect(frame).toContain("█");
     expect(frame).not.toContain("Ink primary UI");
     expect(frame).toContain("Doctor");
     expect(frame).toContain("Models");
