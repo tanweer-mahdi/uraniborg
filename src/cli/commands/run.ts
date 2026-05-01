@@ -34,6 +34,7 @@ import {
 } from "../../review/index.js";
 import type { ResolvedUraniborgConfig } from "../../types/app-config.js";
 import { writeInfo } from "../../ui/output.js";
+import type { RunLifecycleEventSink } from "../../ui/interactive.js";
 import {
   executeWithProcessCancellation,
   promptAndRunRemediations,
@@ -91,6 +92,7 @@ export interface RunCommandDependencies
   getSearchStatus?: typeof getFeynmanSearchStatus;
   runner?: FeynmanCommandRunner;
   writeLine?: (message: string) => void;
+  eventSink?: RunLifecycleEventSink | undefined;
 }
 
 export interface RunPrompts extends RemediationPrompts {
@@ -183,7 +185,8 @@ export async function runRunCommand(
         authClient: dependencies.authClient,
         runner,
         signal,
-        writeLine
+        writeLine,
+        eventSink: dependencies.eventSink
       }
     );
   });
