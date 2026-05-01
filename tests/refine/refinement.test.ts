@@ -12,7 +12,8 @@ vi.mock("@mariozechner/pi-ai", async () => {
 });
 
 import {
-  URANIBORG_REFINEMENT_SYSTEM_PROMPT,
+  URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT,
+  URANIBORG_FIXED_REVISION_OUTPUT_PROMPT,
   buildRefinePrompt,
   executeRefinement,
   parseRefinementOutput
@@ -25,13 +26,34 @@ describe("refinement prompt assembly", () => {
     const prompt = buildRefinePrompt({
       currentDraft: "# Draft\n",
       peerReview: "Needs more evidence.\n",
-      informationHighway: "## Iteration 1\n"
+      informationHighway: "## Iteration 1\n",
+      revisionInstruction: URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT
     });
 
-    expect(prompt.systemPrompt).toBe(URANIBORG_REFINEMENT_SYSTEM_PROMPT);
+    expect(prompt.systemPrompt).toContain(
+      URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT.trim()
+    );
+    expect(prompt.systemPrompt).toContain(
+      URANIBORG_FIXED_REVISION_OUTPUT_PROMPT
+    );
     expect(prompt.userPrompt).toContain("CURRENT_DRAFT\n# Draft\n");
     expect(prompt.userPrompt).toContain("PEER_REVIEW\nNeeds more evidence.\n");
     expect(prompt.userPrompt).toContain("INFORMATION_HIGHWAY\n## Iteration 1\n");
+  });
+
+  it("keeps the structural contract fixed when custom guidance is supplied", () => {
+    const prompt = buildRefinePrompt({
+      currentDraft: "# Draft\n",
+      peerReview: "Needs more evidence.\n",
+      informationHighway: "## Iteration 1\n",
+      revisionInstruction: "Focus on argument flow and claim calibration."
+    });
+
+    expect(prompt.systemPrompt).toContain(
+      "Focus on argument flow and claim calibration."
+    );
+    expect(prompt.systemPrompt).toContain("=== REFINED_DRAFT ===");
+    expect(prompt.systemPrompt).toContain("=== CHANGE_SUMMARY ===");
   });
 });
 

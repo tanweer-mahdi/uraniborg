@@ -1,11 +1,7 @@
 import { err, ok, type Result } from "../types/result.js";
 import type { ResolvedUraniborgConfig } from "../types/app-config.js";
 
-export const URANIBORG_REFINEMENT_SYSTEM_PROMPT = `You are revising a research document in response to peer review.
-
-Your job is to produce:
-1. A full revised draft.
-2. A structured change summary.
+export const URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT = `You are revising a research document in response to peer review.
 
 You are not the reviewer. You are the author making disciplined revisions.
 
@@ -25,6 +21,11 @@ Behavior rules:
 - Keep the document internally consistent after revision.
 - Preserve Markdown structure and produce a complete standalone revised draft, not a patch or fragment.
 - If the review requests work that cannot honestly be completed from the available material, acknowledge the limitation and revise the draft conservatively.
+`;
+
+export const URANIBORG_FIXED_REVISION_OUTPUT_PROMPT = `Your job is to produce:
+1. A full revised draft.
+2. A structured change summary.
 
 Output format:
 === REFINED_DRAFT ===
@@ -56,6 +57,7 @@ export interface RefinePromptInput {
   currentDraft: string;
   peerReview: string;
   informationHighway: string;
+  revisionInstruction: string;
 }
 
 export interface RefinePrompt {
@@ -87,7 +89,10 @@ export interface RefineError {
   rawOutput?: string | undefined;
 }
 
-export interface ExecuteRefinementInput extends RefinePromptInput {
+export interface ExecuteRefinementInput {
+  currentDraft: string;
+  peerReview: string;
+  informationHighway: string;
   config: ResolvedUraniborgConfig;
   model: string;
   signal?: AbortSignal | undefined;
@@ -105,7 +110,11 @@ export interface ExecutedRefinement {
 
 export function buildRefinePrompt(input: RefinePromptInput): RefinePrompt {
   return {
-    systemPrompt: URANIBORG_REFINEMENT_SYSTEM_PROMPT,
+    systemPrompt: [
+      input.revisionInstruction.trim(),
+      "",
+      URANIBORG_FIXED_REVISION_OUTPUT_PROMPT
+    ].join("\n"),
     userPrompt: [
       "CURRENT_DRAFT",
       input.currentDraft,
