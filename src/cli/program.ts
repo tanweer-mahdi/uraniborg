@@ -14,9 +14,19 @@ export function createProgram(): Command {
 
   program
     .name("uraniborg")
-    .description("Run deterministic draft review and revision loops.")
+    .description("Run deterministic draft review and revision loops. Interactive TTY sessions launch the Ink UI by default.")
     .showHelpAfterError()
     .showSuggestionAfterError();
+
+  program.addHelpText(
+    "after",
+    `
+Interactive UI:
+  uraniborg launches the Ink UI by default in interactive TTY sessions.
+  Use --no-ui to bypass Ink and keep the plain command execution path for
+  automation, scripting, pipes, or parallel experiment runs.
+`
+  );
 
   registerInitCommand(program);
   registerRevisionCommand(program);

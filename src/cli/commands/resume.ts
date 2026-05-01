@@ -127,7 +127,8 @@ export async function runResumeCommand(
         authClient,
         runner,
         signal,
-        writeLine
+        writeLine,
+        eventSink: dependencies.eventSink
       }
     );
   });

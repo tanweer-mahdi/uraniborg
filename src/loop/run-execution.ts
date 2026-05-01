@@ -38,6 +38,7 @@ import {
 } from "../run/index.js";
 import { createOperationCancelledError, isOperationCancelledError } from "../types/cancellation.js";
 import type { ResolvedUraniborgConfig } from "../types/app-config.js";
+import type { RunFailureKind, RunLifecycleEventSink } from "../ui/interactive.js";
 
 export interface RunExecutionClock {
   now: () => Date;
@@ -67,6 +68,7 @@ export interface RunExecutionDependencies {
   runner?: FeynmanCommandRunner | undefined;
   signal?: AbortSignal | undefined;
   writeLine?: ((message: string) => void) | undefined;
+  eventSink?: RunLifecycleEventSink | undefined;
 }
 
 export interface ExecuteRunLifecycleResult {
@@ -144,9 +146,14 @@ export async function executeRunLifecycle(
   );
 
   writeLine(`Starting run: ${runId}`);
+  dependencies.eventSink?.onEvent({
+    type: "run-started",
+    runId
+  });
 
   return continueRunLifecycle(
     {
+      runId,
       manifestPath: artifactPaths.manifestFile,
       runDirectory: artifactPaths.runDirectory,
       currentDraftFile: artifactPaths.currentDraftFile,
@@ -182,9 +189,14 @@ export async function resumeRunLifecycle(
   }
 
   writeLine(`Resuming run: ${input.runId}`);
+  dependencies.eventSink?.onEvent({
+    type: "run-resumed",
+    runId: input.runId
+  });
 
   return continueRunLifecycle(
     {
+      runId: input.runId,
       manifestPath: artifactPaths.manifestFile,
       runDirectory: artifactPaths.runDirectory,
       currentDraftFile: artifactPaths.currentDraftFile,
@@ -203,6 +215,7 @@ export async function resumeRunLifecycle(
 
 async function continueRunLifecycle(
   input: {
+    runId: string;
     manifestPath: string;
     runDirectory: string;
     currentDraftFile: string;
@@ -231,6 +244,7 @@ async function continueRunLifecycle(
     ) {
       await executeSingleIteration(
         {
+          runId: input.runId,
           manifestPath: input.manifestPath,
           runDirectory: input.runDirectory,
           currentDraftFile: input.currentDraftFile,
@@ -252,7 +266,8 @@ async function continueRunLifecycle(
           authClient: dependencies.authClient,
           runner: dependencies.runner,
           signal: dependencies.signal,
-          writeLine
+          writeLine,
+          eventSink: dependencies.eventSink
         }
       );
     }
@@ -278,6 +293,11 @@ async function continueRunLifecycle(
 
   writeLine("Run complete.");
   writeLine(`Final draft: ${input.finalDraftFile}`);
+  dependencies.eventSink?.onEvent({
+    type: "run-completed",
+    runId: input.runId,
+    finalDraftFile: input.finalDraftFile
+  });
 
   return {
     manifest: finalManifest,
@@ -287,6 +307,7 @@ async function continueRunLifecycle(
 
 async function executeSingleIteration(
   input: {
+    runId: string;
     manifestPath: string;
     runDirectory: string;
     currentDraftFile: string;
@@ -306,6 +327,7 @@ async function executeSingleIteration(
     authClient?: RevisionAuthClient | undefined;
     runner?: FeynmanCommandRunner | undefined;
     signal?: AbortSignal | undefined;
+    eventSink?: RunLifecycleEventSink | undefined;
   }
 ): Promise<void> {
   const iterationArtifacts = await ensureIterationDirectory(
@@ -329,6 +351,7 @@ async function executeSingleIteration(
 
 async function executeReviewPhase(
   input: {
+    runId: string;
     manifestPath: string;
     runDirectory: string;
     currentDraftFile: string;
@@ -345,11 +368,19 @@ async function executeReviewPhase(
     filesystem?: ReviewFilesystem | undefined;
     runner?: FeynmanCommandRunner | undefined;
     signal?: AbortSignal | undefined;
+    eventSink?: RunLifecycleEventSink | undefined;
   }
 ): Promise<void> {
   dependencies.writeLine(
     `Iteration ${input.iterationNumber}/${input.totalIterations}: review`
   );
+  dependencies.eventSink?.onEvent({
+    type: "phase-started",
+    runId: input.runId,
+    iteration: input.iterationNumber,
+    totalIterations: input.totalIterations,
+    phase: "review"
+  });
 
   if (input.startingStatus === "initialized") {
     await requireTransition(
@@ -430,6 +461,17 @@ async function executeReviewPhase(
       );
     }
 
+    if (!(error instanceof Error && error.message === "Uraniborg run cancelled.")) {
+      dependencies.eventSink?.onEvent({
+        type: "run-failed",
+        runId: input.runId,
+        iteration: input.iterationNumber,
+        failureKind: "review-failure",
+        message: error instanceof Error ? error.message : "Review phase failed.",
+        pointers: [iterationArtifacts.reviewLogFile]
+      });
+    }
+
     throw error;
   }
 
@@ -448,6 +490,7 @@ async function executeReviewPhase(
 
 async function executeRefinePhase(
   input: {
+    runId: string;
     manifestPath: string;
     currentDraftFile: string;
     informationHighwayFile: string;
@@ -464,11 +507,19 @@ async function executeRefinePhase(
     filesystem?: ReviewFilesystem | undefined;
     authClient?: RevisionAuthClient | undefined;
     signal?: AbortSignal | undefined;
+    eventSink?: RunLifecycleEventSink | undefined;
   }
 ): Promise<void> {
   dependencies.writeLine(
     `Iteration ${input.iterationNumber}/${input.totalIterations}: refine`
   );
+  dependencies.eventSink?.onEvent({
+    type: "phase-started",
+    runId: input.runId,
+    iteration: input.iterationNumber,
+    totalIterations: input.totalIterations,
+    phase: "refine"
+  });
 
   if (input.startingStatus !== "refine_running") {
     await requireTransition(
@@ -521,6 +572,17 @@ async function executeRefinePhase(
       iterationArtifacts,
       dependencies.filesystem
     );
+    dependencies.eventSink?.onEvent({
+      type: "run-failed",
+      runId: input.runId,
+      iteration: input.iterationNumber,
+      failureKind: mapRefinementFailureKind(refinementResult.error.code),
+      message: surfacedRefinementError.message,
+      pointers: collectRefinementFailurePointers(
+        mapRefinementFailureKind(refinementResult.error.code),
+        iterationArtifacts
+      )
+    });
 
     await writeArtifactFile(
       iterationArtifacts.refineLogFile,
@@ -569,6 +631,7 @@ async function executeRefinePhase(
 
 async function executeMemoryPhase(
   input: {
+    runId: string;
     manifestPath: string;
     currentDraftFile: string;
     informationHighwayFile: string;
@@ -583,11 +646,19 @@ async function executeMemoryPhase(
     writeLine: (message: string) => void;
     filesystem?: ReviewFilesystem | undefined;
     signal?: AbortSignal | undefined;
+    eventSink?: RunLifecycleEventSink | undefined;
   }
 ): Promise<void> {
   dependencies.writeLine(
     `Iteration ${input.iterationNumber}/${input.totalIterations}: memory update`
   );
+  dependencies.eventSink?.onEvent({
+    type: "phase-started",
+    runId: input.runId,
+    iteration: input.iterationNumber,
+    totalIterations: input.totalIterations,
+    phase: "memory"
+  });
 
   if (input.startingStatus !== "memory_update") {
     await requireTransition(
@@ -619,6 +690,14 @@ async function executeMemoryPhase(
   });
 
   if (!memoryUpdateResult.ok) {
+    dependencies.eventSink?.onEvent({
+      type: "run-failed",
+      runId: input.runId,
+      iteration: input.iterationNumber,
+      failureKind: "memory-update-failure",
+      message: memoryUpdateResult.error.message,
+      pointers: [iterationArtifacts.changesFile, input.informationHighwayFile]
+    });
     await persistRunFailure(
       input.manifestPath,
       ["memory_update"],
@@ -904,6 +983,23 @@ function isIterationStartStatus(status: RunStatus): status is IterationStartStat
     status === "memory_update" ||
     status === "iteration_complete"
   );
+}
+
+function mapRefinementFailureKind(
+  code: RefineError["code"]
+): RunFailureKind {
+  return code === "refine_output_invalid"
+    ? "refinement-output-contract-failure"
+    : "refinement-execution-failure";
+}
+
+function collectRefinementFailurePointers(
+  failureKind: RunFailureKind,
+  iterationArtifacts: IterationArtifactPaths
+): readonly string[] {
+  return failureKind === "refinement-output-contract-failure"
+    ? [iterationArtifacts.refineResponseFile, iterationArtifacts.refineLogFile]
+    : [iterationArtifacts.refineLogFile];
 }
 
 function shouldRunReviewPhase(startingStatus: IterationStartStatus): boolean {

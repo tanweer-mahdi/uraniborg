@@ -16,6 +16,14 @@ export interface HistoryCommandDependencies {
   writeLine?: (message: string) => void;
 }
 
+export interface HistoryEntry {
+  runId: string;
+  createdAt: string;
+  status: string;
+  progress: string;
+  title: string;
+}
+
 export function registerHistoryCommand(program: Command): void {
   program
     .command("history")
@@ -29,6 +37,21 @@ export async function runHistoryCommand(
   dependencies: HistoryCommandDependencies = {}
 ): Promise<void> {
   const writeLine = dependencies.writeLine ?? writeInfo;
+  const entries = await collectHistoryEntries(dependencies);
+
+  if (entries.length === 0) {
+    writeLine("No Uraniborg runs are available.");
+    return;
+  }
+
+  for (const entry of entries) {
+    writeLine(formatHistoryLine(entry));
+  }
+}
+
+export async function collectHistoryEntries(
+  dependencies: HistoryCommandDependencies = {}
+): Promise<readonly HistoryEntry[]> {
   const paths = (dependencies.resolvePaths ?? resolveUraniborgPaths)();
   const filesystem = dependencies.filesystem ?? {
     async readdir(directoryPath: string): Promise<readonly string[]> {
@@ -43,39 +66,35 @@ export async function runHistoryCommand(
     runDirectories = await filesystem.readdir(paths.runsDirectory);
   } catch (error) {
     if (isNodeErrorWithCode(error, "ENOENT")) {
-      writeLine("No Uraniborg runs are available.");
-      return;
+      return [];
     }
 
     throw error;
   }
 
-  if (runDirectories.length === 0) {
-    writeLine("No Uraniborg runs are available.");
-    return;
-  }
-
   const manifests = await Promise.all(
-    [...runDirectories].map(async (runId) => {
-      const manifest = await readManifestFn(
-        path.join(paths.runsDirectory, runId, "run.json")
-      );
-
-      return manifest;
-    })
+    [...runDirectories].map(async (runId) =>
+      readManifestFn(path.join(paths.runsDirectory, runId, "run.json"))
+    )
   );
 
-  const sortedManifests = manifests.sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt)
-  );
-
-  for (const manifest of sortedManifests) {
-    writeLine(formatHistoryLine(manifest));
-  }
+  return manifests
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .map((manifest) => toHistoryEntry(manifest));
 }
 
-function formatHistoryLine(manifest: RunManifest): string {
-  return `${manifest.runId} | ${manifest.createdAt} | ${manifest.status} | ${manifest.iterationsCompleted}/${manifest.iterationsPlanned} | ${manifest.title}`;
+export function formatHistoryLine(entry: HistoryEntry): string {
+  return `${entry.runId} | ${entry.createdAt} | ${entry.status} | ${entry.progress} | ${entry.title}`;
+}
+
+function toHistoryEntry(manifest: RunManifest): HistoryEntry {
+  return {
+    runId: manifest.runId,
+    createdAt: manifest.createdAt,
+    status: manifest.status,
+    progress: `${manifest.iterationsCompleted}/${manifest.iterationsPlanned}`,
+    title: manifest.title
+  };
 }
 
 function isNodeErrorWithCode(
