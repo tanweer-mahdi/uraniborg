@@ -54,7 +54,7 @@ interface RevisionCredentialSetupResult {
   providerContext?: UraniborgConfig["revision"]["providerContext"];
 }
 
-const BROWSER_LOGIN_STRATEGY: UraniborgRevisionAuthStrategy = {
+export const BROWSER_LOGIN_STRATEGY: UraniborgRevisionAuthStrategy = {
   authClass: "oauth",
   acquisition: "browser-login",
   guided: true
@@ -138,7 +138,7 @@ export async function runGuidedRevisionSetup(
   );
 }
 
-async function loadExistingConfig(
+export async function loadExistingConfig(
   configFilePath: string,
   loadConfig: typeof loadSetupSeedUraniborgConfig
 ): Promise<UraniborgConfig | null> {
@@ -158,7 +158,7 @@ async function loadExistingConfig(
   throw new Error(result.error.message);
 }
 
-function createDefaultConfig(): UraniborgConfig {
+export function createDefaultConfig(): UraniborgConfig {
   const profile = getRevisionProfile("openai-codex-chatgpt");
 
   return createConfig({
@@ -175,7 +175,7 @@ function createDefaultConfig(): UraniborgConfig {
   });
 }
 
-function createConfig(options: {
+export function createConfig(options: {
   profileId: UraniborgRevisionProfileId;
   credentialBinding: UraniborgRevisionCredentialBinding;
   timeoutMs: number;

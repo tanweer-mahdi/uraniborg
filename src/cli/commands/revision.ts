@@ -30,7 +30,7 @@ export interface RevisionCommandDependencies extends RevisionSetupDependencies {
   environment?: NodeJS.ProcessEnv;
 }
 
-interface RevisionConfigReport {
+export interface RevisionConfigReport {
   configFilePath: string;
   readinessResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
@@ -76,7 +76,7 @@ export async function runRevisionConfigCommand(
   }
 }
 
-async function collectRevisionConfigReport(
+export async function collectRevisionConfigReport(
   dependencies: RevisionCommandDependencies
 ): Promise<RevisionConfigReport> {
   const resolvePaths = dependencies.resolvePaths ?? resolveUraniborgPaths;
@@ -101,7 +101,7 @@ async function collectRevisionConfigReport(
   };
 }
 
-function renderRevisionConfigReport(
+export function renderRevisionConfigReport(
   report: RevisionConfigReport
 ): readonly string[] {
   const lines: string[] = ["Revision Configuration"];

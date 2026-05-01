@@ -56,7 +56,7 @@ export interface DoctorCommandDependencies extends SharedRemediationDependencies
   runner?: FeynmanCommandRunner;
 }
 
-interface DoctorReport {
+export interface DoctorReport {
   appHomeStatus: UraniborgAppHomeStatus;
   runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
