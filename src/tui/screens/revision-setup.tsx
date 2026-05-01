@@ -115,12 +115,13 @@ export function RevisionSetupScreen(props: {
 
       if (selectedProfile !== undefined) {
         setError(undefined);
-        void externalFlow.runFlow({
-          startingStatus: `Starting ${selectedProfile.label} browser login…`,
-          async run(helpers) {
-            return runManagedLogin({
+      void externalFlow.runFlow({
+        startingStatus: `Starting ${selectedProfile.label} browser login…`,
+        async run(helpers) {
+          return runManagedLogin({
               profileId: selectedProfile.id,
               defaultModel: defaultModel.trim(),
+              instructionPrompt: config?.revision.instructionPrompt,
               authClient: props.authClient ?? createRevisionAuthClient(),
               browserLauncher:
                 props.browserLauncher ?? createNodeRevisionBrowserLauncher(),
@@ -223,6 +224,7 @@ async function loadInitialConfig(): Promise<UraniborgConfig> {
 async function runManagedLogin(options: {
   profileId: UraniborgRevisionProfileId;
   defaultModel: string;
+  instructionPrompt?: UraniborgConfig["revision"]["instructionPrompt"];
   authClient: RevisionAuthClient;
   browserLauncher: RevisionBrowserLauncher;
   appendStatus: (line: string) => void;
@@ -300,6 +302,7 @@ async function runManagedLogin(options: {
       },
       timeoutMs: 60000,
       providerContext,
+      instructionPrompt: options.instructionPrompt,
       defaults: {
         model: options.defaultModel,
         temperature: 0.2

@@ -8,10 +8,12 @@ import type { RevisionConfigReport } from "../../src/cli/commands/revision.js";
 import { ModelsScreen } from "../../src/tui/screens/models.js";
 import { RevisionConfigScreen } from "../../src/tui/screens/revision-config.js";
 import { createAlphaLoginRemediationAction } from "../../src/review/index.js";
+import type { UraniborgConfig } from "../../src/types/app-config.js";
 import { err, ok } from "../../src/types/result.js";
 import {
   createAppHomeStatus,
   createBrowserConfig,
+  createResolvedBrowserConfig,
   createReadyReadinessReport,
   createReadyRuntimeStatus,
   flushInk
@@ -51,7 +53,6 @@ describe("readiness routes", () => {
 
     expect(app.lastFrame()).toContain("Config Sections");
     expect(app.lastFrame()).toContain("Revision Provider");
-    expect(app.lastFrame()).toContain("incomplete");
 
     app.stdin.write("\u001B[B");
     await flushInk();
@@ -59,6 +60,9 @@ describe("readiness routes", () => {
     await flushInk();
     app.stdin.write("\u001B[B");
     await flushInk();
+
+    expect(app.lastFrame()).toContain("incomplete");
+
     app.stdin.write("\r");
     await flushInk();
 
@@ -99,6 +103,78 @@ describe("readiness routes", () => {
 
     app.unmount();
   });
+
+  it("renders custom revision prompt path and guidance preview", async () => {
+    const app = render(
+      <RevisionConfigScreen
+        loadSnapshot={async () => ({
+          doctorReport: createReadyConfigDoctorReport(),
+          modelsReport: createIncompleteModelsReport(),
+          revisionReport: createReadyCustomPromptRevisionConfigReport()
+        })}
+      />
+    );
+    await flushInk();
+
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\u001B[B");
+    await flushInk();
+
+    expect(app.lastFrame()).toContain("Revision prompt: custom guidance file");
+    expect(app.lastFrame()).toContain("Prompt path: /tmp/prompts/revision.md");
+    expect(app.lastFrame()).toContain("Focus on argument flow.");
+
+    app.unmount();
+  });
+
+  it("saves a canonical absolute custom revision prompt path from the TUI", async () => {
+    const saveConfig = vi.fn(
+      async (_configFilePath: string, _config: UraniborgConfig) => undefined
+    );
+    const app = render(
+      <RevisionConfigScreen
+        cwd="/tmp/workspace"
+        saveConfig={saveConfig}
+        loadSnapshot={async () => ({
+          doctorReport: createReadyConfigDoctorReport(),
+          modelsReport: createIncompleteModelsReport(),
+          revisionReport: createDefaultRevisionConfigReport()
+        })}
+      />
+    );
+    await flushInk();
+
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\r");
+    await flushInk();
+
+    app.stdin.write("notes/revision.md");
+    await flushInk();
+    app.stdin.write("\r");
+    await flushInk();
+
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+    const savedCall = saveConfig.mock.calls[0];
+
+    expect(savedCall?.[0]).toBe("/tmp/alice/.uraniborg/config.json");
+    expect(savedCall?.[1].revision.instructionPrompt).toEqual({
+      sourceFile: "/tmp/workspace/notes/revision.md"
+    });
+
+    app.unmount();
+  });
 });
 
 function createIncompleteModelsReport(): ModelsReport {
@@ -129,6 +205,46 @@ function createIncompleteRevisionConfigReport(): RevisionConfigReport {
       details: ["Run `uraniborg revision --setup` again."]
     }),
     parsedConfigResult: ok(config)
+  };
+}
+
+function createDefaultRevisionConfigReport(): RevisionConfigReport {
+  const config = createBrowserConfig();
+
+  return {
+    configFilePath: "/tmp/alice/.uraniborg/config.json",
+    readinessResult: ok(createResolvedBrowserConfig()),
+    parsedConfigResult: ok(config)
+  };
+}
+
+function createReadyCustomPromptRevisionConfigReport(): RevisionConfigReport {
+  const parsedConfig = createBrowserConfig({
+    instructionPrompt: {
+      sourceFile: "/tmp/prompts/revision.md"
+    }
+  });
+  const resolvedConfig = createResolvedBrowserConfig({
+    instructionPrompt: {
+      sourceFile: "/tmp/prompts/revision.md"
+    }
+  });
+
+  return {
+    configFilePath: "/tmp/alice/.uraniborg/config.json",
+    readinessResult: ok({
+      ...resolvedConfig,
+      revision: {
+        ...resolvedConfig.revision,
+        instructionPrompt: {
+          source: "file",
+          configuredPath: "/tmp/prompts/revision.md",
+          effectiveInstruction:
+            "Focus on argument flow.\nReject vague reviewer asks."
+        }
+      }
+    }),
+    parsedConfigResult: ok(parsedConfig)
   };
 }
 

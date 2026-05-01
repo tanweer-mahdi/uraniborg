@@ -116,6 +116,7 @@ export function createReadyReadinessReport(options?: {
 export function createBrowserConfig(options?: {
   profileId?: "openai-codex-chatgpt" | "claude-browser" | "gemini-cloud-code-assist";
   model?: string;
+  instructionPrompt?: UraniborgConfig["revision"]["instructionPrompt"];
 }): UraniborgConfig {
   const profileId = options?.profileId ?? "openai-codex-chatgpt";
   const profile = getRevisionProfile(profileId);
@@ -126,6 +127,11 @@ export function createBrowserConfig(options?: {
       type: "pi-auth-storage",
       providerId: profile.piProviderId
     },
+    ...(options?.instructionPrompt === undefined
+      ? {}
+      : {
+          instructionPrompt: options.instructionPrompt
+        }),
     timeoutMs: 60000,
     defaults: {
       model: options?.model ?? profile.defaultModel,
@@ -137,6 +143,7 @@ export function createBrowserConfig(options?: {
 export function createResolvedBrowserConfig(options?: {
   profileId?: "openai-codex-chatgpt" | "claude-browser" | "gemini-cloud-code-assist";
   model?: string;
+  instructionPrompt?: UraniborgConfig["revision"]["instructionPrompt"];
 }): ResolvedUraniborgConfig {
   const config = createBrowserConfig(options);
 
@@ -144,6 +151,17 @@ export function createResolvedBrowserConfig(options?: {
     ...config,
     revision: {
       ...config.revision,
+      instructionPrompt:
+        config.revision.instructionPrompt === undefined
+          ? {
+              source: "default",
+              effectiveInstruction: "Default revision instruction"
+            }
+          : {
+              source: "file",
+              configuredPath: config.revision.instructionPrompt.sourceFile,
+              effectiveInstruction: "Custom revision instruction"
+            },
       runtime: {
         kind: "pi-managed",
         providerId: config.revision.credentialBinding.providerId
