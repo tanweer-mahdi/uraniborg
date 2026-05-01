@@ -77,21 +77,31 @@ export function MenuList<T extends string>(props: {
       {props.items.map((item) => {
         const selected = item.id === props.selectedId;
         const confirmed = confirmedIds.has(item.id);
+        const showHint =
+          selected &&
+          item.hint !== undefined &&
+          item.hint.trim().length > 0;
 
         return (
-          <Text
-            key={item.id}
-            {...(selected
-              ? {
-                  color: "cyan" as const
-                }
-              : {})}
-          >
-            {selected ? "› " : "  "}
-            {confirmed ? "✓ " : ""}
-            {item.label}
-            {item.hint === undefined ? "" : ` — ${item.hint}`}
-          </Text>
+          <Box key={item.id} flexDirection="column">
+            <Text
+              {...(selected
+                ? {
+                    color: "cyan" as const
+                  }
+                : {})}
+            >
+              {selected ? "› " : "  "}
+              {confirmed ? "✓ " : ""}
+              {item.label}
+            </Text>
+            {showHint ? (
+              <Text color="#b8b8b8">
+                {"  "}
+                {item.hint}
+              </Text>
+            ) : null}
+          </Box>
         );
       })}
     </Box>

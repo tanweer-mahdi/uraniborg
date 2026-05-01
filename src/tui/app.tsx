@@ -5,6 +5,7 @@ import { runResumeCommand } from "../cli/commands/resume.js";
 import { runRunCommand } from "../cli/commands/run.js";
 import { FooterHelp, MenuList, ShellFrame } from "./components.js";
 import { UraniborgLogo } from "./logo.js";
+import { AboutScreen } from "./screens/about.js";
 import { DoctorScreen } from "./screens/doctor.js";
 import { HistoryScreen } from "./screens/history.js";
 import { ModelsScreen } from "./screens/models.js";
@@ -17,11 +18,24 @@ import { nextProgressState } from "./progress-state.js";
 import type { TuiLaunchIntent, TuiRoute } from "./types.js";
 
 const DASHBOARD_ITEMS = [
-  { id: "doctor", label: "Doctor", hint: "Check environment readiness" },
-  { id: "models", label: "Models", hint: "Inspect review and revision model availability" },
-  { id: "revision-config", label: "Config", hint: "Configure Feynman and revision providers" },
-  { id: "run-setup", label: "Run", hint: "Start a draft review-revision loop" },
-  { id: "history", label: "History", hint: "Inspect prior runs" }
+  { id: "about", label: "What is Uraniborg?" },
+  { id: "doctor", label: "Doctor", hint: "Loop readiness" },
+  {
+    id: "models",
+    label: "Models",
+    hint: "Current models for peer-review and refinement"
+  },
+  {
+    id: "revision-config",
+    label: "Config",
+    hint: "Configure peer-review and refinement backends"
+  },
+  {
+    id: "run-setup",
+    label: "RunLoop",
+    hint: "Point at your draft and run the loop"
+  },
+  { id: "history", label: "History", hint: "Examine prior loop runs" }
 ] as const;
 
 type DashboardItemId = (typeof DASHBOARD_ITEMS)[number]["id"];
@@ -32,7 +46,7 @@ export function UraniborgTuiApp(props: {
   const { exit } = useApp();
   const [route, setRoute] = useState<TuiRoute>(props.initialIntent.route);
   const [dashboardSelection, setDashboardSelection] =
-    useState<DashboardItemId>("doctor");
+    useState<DashboardItemId>("about");
   const [progress, setProgress] = useState<RunProgressViewModel>({
     runId: "(pending)",
     status: "preparing",
@@ -95,6 +109,8 @@ export function UraniborgTuiApp(props: {
         return (
           <MenuList items={DASHBOARD_ITEMS} selectedId={dashboardSelection} />
         );
+      case "about":
+        return <AboutScreen />;
       case "doctor":
         return <DoctorScreen />;
       case "models":
@@ -168,6 +184,8 @@ export function UraniborgTuiApp(props: {
 
 function mapDashboardSelectionToRoute(selection: DashboardItemId): TuiRoute {
   switch (selection) {
+    case "about":
+      return { kind: "about" };
     case "revision-config":
       return { kind: "revision-config" };
     case "doctor":
@@ -183,6 +201,8 @@ function mapDashboardSelectionToRoute(selection: DashboardItemId): TuiRoute {
 
 function renderRouteTitle(route: TuiRoute): string {
   switch (route.kind) {
+    case "about":
+      return "What is Uraniborg?";
     case "doctor":
       return "Doctor";
     case "models":

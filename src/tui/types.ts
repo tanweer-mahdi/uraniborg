@@ -3,6 +3,9 @@ export type TuiRoute =
       kind: "dashboard";
     }
   | {
+      kind: "about";
+    }
+  | {
       kind: "doctor";
     }
   | {
