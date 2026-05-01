@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 
 import { resolveUraniborgPaths } from "../../config/index.js";
 import { resolveIterationArtifactPaths, resolveRunArtifactPaths } from "../../run/artifact-store.js";
-import { readRunManifest } from "../../run/index.js";
+import { readRunConfigSnapshot, readRunManifest } from "../../run/index.js";
 import { FooterHelp, Section } from "../components.js";
 import { useReloadableAsyncValue } from "../hooks.js";
 
@@ -16,6 +16,10 @@ export interface RunDetailViewModel {
   selectedModels: {
     review: string;
     refine: string;
+  };
+  revisionPrompt: {
+    source: "default" | "file";
+    configuredPath?: string | undefined;
   };
   iterationsPlanned: number;
   iterationsCompleted: number;
@@ -71,6 +75,15 @@ export function RunDetailScreen(props: {
         <Text>Review model: {detail.selectedModels.review}</Text>
         <Text>Revision model: {detail.selectedModels.refine}</Text>
         <Text>
+          Revision prompt:{" "}
+          {detail.revisionPrompt.source === "default"
+            ? "Uraniborg default guidance"
+            : "Custom guidance file"}
+        </Text>
+        {detail.revisionPrompt.configuredPath === undefined ? null : (
+          <Text>Prompt path: {detail.revisionPrompt.configuredPath}</Text>
+        )}
+        <Text>
           Iterations: {detail.iterationsCompleted}/{detail.iterationsPlanned}
         </Text>
         <Text>Current iteration: {detail.currentIteration}</Text>
@@ -105,7 +118,10 @@ export function RunDetailScreen(props: {
 export async function collectRunDetail(runId: string): Promise<RunDetailViewModel> {
   const paths = resolveUraniborgPaths();
   const topLevel = resolveRunArtifactPaths(paths.runsDirectory, runId);
-  const manifest = await readRunManifest(topLevel.manifestFile);
+  const [manifest, configSnapshot] = await Promise.all([
+    readRunManifest(topLevel.manifestFile),
+    readRunConfigSnapshot(topLevel.configSnapshotFile)
+  ]);
   const iterationArtifacts = Array.from(
     { length: manifest.iterationsPlanned },
     (_, index) => {
@@ -136,6 +152,14 @@ export async function collectRunDetail(runId: string): Promise<RunDetailViewMode
     createdAt: manifest.createdAt,
     sourceInputPath: manifest.sourceInputPath,
     selectedModels: manifest.selectedModels,
+    revisionPrompt: {
+      source: configSnapshot.revisionPrompt.source,
+      ...(configSnapshot.revisionPrompt.configuredPath === undefined
+        ? {}
+        : {
+            configuredPath: configSnapshot.revisionPrompt.configuredPath
+          })
+    },
     iterationsPlanned: manifest.iterationsPlanned,
     iterationsCompleted: manifest.iterationsCompleted,
     currentIteration: manifest.phaseMetadata.currentIteration,
