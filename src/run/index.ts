@@ -13,6 +13,7 @@ export {
 export {
   createRunConfigSnapshot,
   createRunManifest,
+  readRunConfigSnapshot,
   readRunManifest,
   RUN_STATUSES,
   writeRunConfigSnapshot,
