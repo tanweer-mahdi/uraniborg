@@ -8,7 +8,10 @@ import type { RevisionSetupDependencies } from "../../src/cli/commands/revision-
 import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
 import { err, ok } from "../../src/types/result.js";
 import type { UraniborgConfig } from "../../src/types/app-config.js";
-import { createTestUraniborgConfig } from "../helpers/uraniborg-config.js";
+import {
+  createResolvedTestUraniborgConfig,
+  createTestUraniborgConfig
+} from "../helpers/uraniborg-config.js";
 
 describe("runRevisionCommand", () => {
   it("runs the guided revision setup flow through `revision --setup`", async () => {
@@ -319,9 +322,9 @@ describe("runRevisionConfigCommand", () => {
       },
       async loadRevisionReadiness() {
         return ok(
-          createTestUraniborgConfig({
+          createResolvedTestUraniborgConfig({
             profileId: "openai-codex-chatgpt",
-            credentialBinding: {
+            binding: {
               type: "pi-auth-storage",
               providerId: "openai-codex"
             },
