@@ -57,7 +57,10 @@ export interface ModelsCommandDependencies extends SharedRemediationDependencies
 export interface ModelsReport {
   runtimeStatus: FeynmanRuntimeStatus;
   readinessReport: FeynmanReadinessReport;
-  readinessConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
+  readinessConfigResult: Result<
+    UraniborgConfig | ResolvedUraniborgConfig,
+    UraniborgConfigLoadError
+  >;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
   runtimeConfigResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
   availableRevisionModels: readonly string[];

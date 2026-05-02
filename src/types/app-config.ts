@@ -16,6 +16,10 @@ export interface UraniborgRevisionDefaults {
   maxOutputTokens?: number | undefined;
 }
 
+export interface UraniborgRevisionInstructionPromptConfig {
+  sourceFile: string;
+}
+
 export interface UraniborgRevisionProfileSelection {
   id: UraniborgRevisionProfileId;
   family: UraniborgRevisionProviderFamily;
@@ -47,6 +51,7 @@ export interface UraniborgRevisionConfig {
   auth: UraniborgRevisionAuthConfig;
   credentialBinding: UraniborgRevisionCredentialBinding;
   providerContext?: UraniborgRevisionProviderContext | undefined;
+  instructionPrompt?: UraniborgRevisionInstructionPromptConfig | undefined;
   endpoint: UraniborgRevisionEndpointConfig;
   defaults: UraniborgRevisionDefaults;
 }
@@ -68,8 +73,16 @@ export interface UraniborgRevisionRuntime {
   providerId: string;
 }
 
-export interface ResolvedUraniborgRevisionConfig extends UraniborgRevisionConfig {
+export interface ResolvedUraniborgRevisionInstructionPrompt {
+  source: "default" | "file";
+  configuredPath?: string | undefined;
+  effectiveInstruction: string;
+}
+
+export interface ResolvedUraniborgRevisionConfig
+  extends Omit<UraniborgRevisionConfig, "instructionPrompt"> {
   runtime: UraniborgRevisionRuntime;
+  instructionPrompt: ResolvedUraniborgRevisionInstructionPrompt;
 }
 
 export interface ResolvedUraniborgConfig {
@@ -87,6 +100,7 @@ export type UraniborgConfigLoadErrorCode =
   | "config_invalid_json"
   | "config_invalid_schema"
   | "config_stale_revision_setup"
+  | "revision_instruction_prompt_unreadable"
   | "managed_credential_missing"
   | "managed_credential_unreadable"
   | "provider_context_missing"

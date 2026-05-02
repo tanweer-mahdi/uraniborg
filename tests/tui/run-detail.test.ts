@@ -4,9 +4,15 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createRunManifest, writeRunManifest } from "../../src/run/manifest.js";
+import {
+  createRunConfigSnapshot,
+  createRunManifest,
+  writeRunConfigSnapshot,
+  writeRunManifest
+} from "../../src/run/manifest.js";
 import { resolveRunArtifactPaths } from "../../src/run/artifact-store.js";
 import { collectRunDetail } from "../../src/tui/screens/run-detail.js";
+import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("collectRunDetail", () => {
   const temporaryRoots: string[] = [];
@@ -61,6 +67,30 @@ describe("collectRunDetail", () => {
           timestamp: "2026-05-01T00:10:00.000Z"
         }
       }
+    );
+    await writeRunConfigSnapshot(
+      runArtifacts.configSnapshotFile,
+      createRunConfigSnapshot({
+        config: createResolvedTestUraniborgConfig({
+          profileId: "openai-codex-chatgpt",
+          binding: {
+            type: "pi-auth-storage",
+            providerId: "openai-codex"
+          },
+          model: "gpt-5.4",
+          providerContext: {
+            accountId: "acct_123"
+          }
+        }),
+        sourcePath: "/tmp/draft.md",
+        title: "Run 1",
+        slug: "run-1",
+        iterationCount: 2,
+        selectedModels: {
+          review: "openai/gpt-5.4",
+          refine: "gpt-5.4"
+        }
+      })
     );
 
     vi.stubEnv("HOME", homeDirectory);

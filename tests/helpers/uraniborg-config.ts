@@ -19,6 +19,7 @@ export function createTestUraniborgConfig(options: {
   maxOutputTokens?: number;
   timeoutMs?: number;
   providerContext?: UraniborgConfig["revision"]["providerContext"];
+  instructionPrompt?: UraniborgConfig["revision"]["instructionPrompt"];
 }): UraniborgConfig {
   const profile = getRevisionProfile(options.profileId);
   const defaults: UraniborgRevisionDefaults = {
@@ -53,6 +54,11 @@ export function createTestUraniborgConfig(options: {
         : {
             providerContext: options.providerContext
           }),
+      ...(options.instructionPrompt === undefined
+        ? {}
+        : {
+            instructionPrompt: options.instructionPrompt
+          }),
       endpoint: {
         baseUrl: profile.canonicalBaseUrl,
         timeoutMs: options.timeoutMs ?? 60000
@@ -83,6 +89,7 @@ export function createResolvedTestUraniborgConfig(options: {
   maxOutputTokens?: number;
   timeoutMs?: number;
   providerContext?: UraniborgConfig["revision"]["providerContext"];
+  instructionPrompt?: UraniborgConfig["revision"]["instructionPrompt"];
 }): ResolvedUraniborgConfig {
   const config = createTestUraniborgConfig({
     profileId: options.profileId,
@@ -107,6 +114,11 @@ export function createResolvedTestUraniborgConfig(options: {
       ? {}
       : {
           providerContext: options.providerContext
+        }),
+    ...(options.instructionPrompt === undefined
+      ? {}
+      : {
+          instructionPrompt: options.instructionPrompt
         })
   });
 
@@ -114,6 +126,17 @@ export function createResolvedTestUraniborgConfig(options: {
     ...config,
     revision: {
       ...config.revision,
+      instructionPrompt:
+        config.revision.instructionPrompt === undefined
+          ? {
+              source: "default",
+              effectiveInstruction: "Default revision instruction"
+            }
+          : {
+              source: "file",
+              configuredPath: config.revision.instructionPrompt.sourceFile,
+              effectiveInstruction: "Custom revision instruction"
+            },
       runtime: {
         kind: "pi-managed",
         providerId: options.binding.providerId

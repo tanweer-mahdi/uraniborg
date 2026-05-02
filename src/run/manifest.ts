@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { readArtifactFile, writeArtifactFile } from "./artifact-store.js";
 import type { RunArtifactPaths, RunFilesystem } from "./artifact-store.js";
+import { URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT } from "../refine/refinement.js";
 import type { ResolvedUraniborgConfig } from "../types/app-config.js";
 
 export const RUN_STATUSES = [
@@ -97,6 +98,11 @@ export interface RunConfigSnapshot {
       projectId?: string | undefined;
     } | undefined;
   };
+  revisionPrompt: {
+    source: "default" | "file";
+    configuredPath?: string | undefined;
+    effectiveInstruction: string;
+  };
 }
 
 const runManifestSchema: z.ZodType<RunManifest> = z.object({
@@ -142,6 +148,46 @@ const runManifestSchema: z.ZodType<RunManifest> = z.object({
       code: z.string().min(1),
       message: z.string().min(1),
       timestamp: z.string().datetime()
+    })
+    .optional()
+});
+
+const runConfigSnapshotSchema = z.object({
+  input: z.object({
+    sourcePath: z.string().min(1),
+    title: z.string().min(1),
+    slug: z.string().min(1)
+  }),
+  iterationCount: z.number().int().positive(),
+  selectedModels: z.object({
+    review: z.string().min(1),
+    refine: z.string().min(1)
+  }),
+  resolvedDefaults: z.object({
+    model: z.string().min(1),
+    temperature: z.number(),
+    maxOutputTokens: z.number().int().positive().optional()
+  }),
+  revisionRuntime: z.object({
+    profileId: z.string().min(1),
+    profileLabel: z.string().min(1),
+    authClass: z.string().min(1),
+    acquisition: z.string().min(1),
+    credentialBindingType: z.string().min(1),
+    baseUrl: z.string().min(1),
+    timeoutMs: z.number().int().positive(),
+    providerContext: z
+      .object({
+        accountId: z.string().min(1).optional(),
+        projectId: z.string().min(1).optional()
+      })
+      .optional()
+  }),
+  revisionPrompt: z
+    .object({
+      source: z.enum(["default", "file"]),
+      configuredPath: z.string().min(1).optional(),
+      effectiveInstruction: z.string().min(1)
     })
     .optional()
 });
@@ -212,6 +258,16 @@ export function createRunConfigSnapshot(input: {
         : {
             providerContext: input.config.revision.providerContext
           })
+    },
+    revisionPrompt: {
+      source: input.config.revision.instructionPrompt.source,
+      ...(input.config.revision.instructionPrompt.configuredPath === undefined
+        ? {}
+        : {
+            configuredPath: input.config.revision.instructionPrompt.configuredPath
+          }),
+      effectiveInstruction:
+        input.config.revision.instructionPrompt.effectiveInstruction
     }
   };
 }
@@ -250,6 +306,31 @@ export async function writeRunConfigSnapshot(
 ): Promise<void> {
   const serializedSnapshot = JSON.stringify(snapshot, null, 2);
   await writeArtifactFile(snapshotPath, `${serializedSnapshot}\n`, filesystem);
+}
+
+export async function readRunConfigSnapshot(
+  snapshotPath: string,
+  filesystem?: RunFilesystem
+): Promise<RunConfigSnapshot> {
+  const fileContents = await readArtifactFile(snapshotPath, filesystem);
+  const parsedJson = parseJson(fileContents, snapshotPath);
+  const parsedSnapshot = runConfigSnapshotSchema.safeParse(parsedJson);
+
+  if (!parsedSnapshot.success) {
+    throw createManifestError(
+      "manifest_invalid_schema",
+      `Run config snapshot schema is invalid at "${snapshotPath}".`
+    );
+  }
+
+  return {
+    ...parsedSnapshot.data,
+    revisionPrompt:
+      parsedSnapshot.data.revisionPrompt ?? {
+        source: "default",
+        effectiveInstruction: URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT
+      }
+  };
 }
 
 function parseJson(fileContents: string, manifestPath: string): unknown {

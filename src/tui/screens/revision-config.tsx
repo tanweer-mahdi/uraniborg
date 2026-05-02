@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Box, Text, useInput } from "ink";
+import TextInput from "ink-text-input";
 
 import {
   collectDoctorReport,
@@ -12,9 +13,15 @@ import {
 } from "../../cli/commands/models.js";
 import {
   collectRevisionConfigReport,
+  renderRevisionInstructionReport,
   renderRevisionConfigReport,
   type RevisionConfigReport
 } from "../../cli/commands/revision.js";
+import {
+  isMarkdownFilePath,
+  resolvePathFromCwd,
+  saveUraniborgConfig
+} from "../../config/index.js";
 import {
   createNodeFeynmanInteractiveLauncher
 } from "../../review/feynman-remediation.js";
@@ -30,7 +37,8 @@ type ConfigSectionId =
   | "review-runtime"
   | "alphaxiv"
   | "web-search"
-  | "revision-provider";
+  | "revision-provider"
+  | "revision-prompt";
 
 interface ConfigScreenSnapshot {
   doctorReport: DoctorReport;
@@ -41,8 +49,13 @@ interface ConfigScreenSnapshot {
 export function RevisionConfigScreen(props: {
   onRevisionSetupRequested?: (() => void) | undefined;
   loadSnapshot?: () => Promise<ConfigScreenSnapshot>;
+  saveConfig?: typeof saveUraniborgConfig;
+  cwd?: string | undefined;
 }): React.JSX.Element {
   const [selection, setSelection] = useState(0);
+  const [editingPrompt, setEditingPrompt] = useState(false);
+  const [promptPathDraft, setPromptPathDraft] = useState("");
+  const [promptError, setPromptError] = useState<string | undefined>(undefined);
   const externalFlow = useExternalFlowController();
   const snapshotState = useReloadableAsyncValue(
     async () =>
@@ -65,6 +78,38 @@ export function RevisionConfigScreen(props: {
 
   useInput((_input, key) => {
     if (externalFlow.busy) {
+      return;
+    }
+
+    if (editingPrompt) {
+      if (!key.return) {
+        return;
+      }
+
+      const snapshot = snapshotState.value;
+
+      if (snapshot === undefined) {
+        return;
+      }
+
+      void saveRevisionPromptPath({
+        report: snapshot.revisionReport,
+        promptPathDraft,
+        cwd: props.cwd ?? process.cwd(),
+        saveConfig: props.saveConfig ?? saveUraniborgConfig
+      })
+        .then(() => {
+          setPromptError(undefined);
+          setEditingPrompt(false);
+          void snapshotState.reload();
+        })
+        .catch((error: unknown) => {
+          setPromptError(
+            error instanceof Error
+              ? error.message
+              : "Revision prompt could not be saved."
+          );
+        });
       return;
     }
 
@@ -91,6 +136,19 @@ export function RevisionConfigScreen(props: {
 
     if (selectedItem.id === "revision-provider") {
       props.onRevisionSetupRequested?.();
+      return;
+    }
+
+    if (selectedItem.id === "revision-prompt") {
+      const configuredPath =
+        snapshot.revisionReport.parsedConfigResult.ok
+          ? snapshot.revisionReport.parsedConfigResult.value.revision
+              .instructionPrompt?.sourceFile ?? ""
+          : "";
+
+      setPromptPathDraft(configuredPath);
+      setPromptError(undefined);
+      setEditingPrompt(true);
       return;
     }
 
@@ -138,9 +196,18 @@ export function RevisionConfigScreen(props: {
         />
       </Section>
       <Section title={selectedItem.label}>
-        {renderConfigSection(snapshot, selectedItem.id).map((line, index) => (
-          <Text key={`${selectedItem.id}:${index}:${line}`}>{line}</Text>
-        ))}
+        {selectedItem.id === "revision-prompt" && editingPrompt ? (
+          <Box flexDirection="column">
+            <TextInput value={promptPathDraft} onChange={setPromptPathDraft} />
+            <Text color="gray">
+              Enter a Markdown file path. Leave empty to use Uraniborg&apos;s default revision guidance.
+            </Text>
+          </Box>
+        ) : (
+          renderConfigSection(snapshot, selectedItem.id).map((line, index) => (
+            <Text key={`${selectedItem.id}:${index}:${line}`}>{line}</Text>
+          ))
+        )}
       </Section>
       {externalFlow.status === undefined ? null : (
         <Text color="yellow">{externalFlow.status}</Text>
@@ -148,7 +215,16 @@ export function RevisionConfigScreen(props: {
       {externalFlow.error === undefined ? null : (
         <Text color="red">{externalFlow.error}</Text>
       )}
-      <FooterHelp text="↑/↓ choose section • Enter open or configure" />
+      {promptError === undefined ? null : (
+        <Text color="red">{promptError}</Text>
+      )}
+      <FooterHelp
+        text={
+          editingPrompt
+            ? "Type Markdown path • Enter save • Leave empty to clear"
+            : "↑/↓ choose section • Enter open or configure"
+        }
+      />
     </Box>
   );
 }
@@ -192,6 +268,11 @@ function buildConfigItems(snapshot: ConfigScreenSnapshot): readonly {
       id: "revision-provider",
       label: "Revision Provider",
       hint: summarizeRevisionConfig(snapshot.revisionReport)
+    },
+    {
+      id: "revision-prompt",
+      label: "Revision Prompt",
+      hint: summarizeRevisionPrompt(snapshot.revisionReport)
     }
   ];
 }
@@ -233,6 +314,12 @@ function renderConfigSection(
         ...renderRevisionConfigReport(snapshot.revisionReport),
         "",
         "Press Enter to open revision provider setup."
+      ];
+    case "revision-prompt":
+      return [
+        ...renderRevisionInstructionReport(snapshot.revisionReport),
+        "",
+        "Press Enter to set, replace, or clear the custom revision prompt path."
       ];
   }
 }
@@ -295,6 +382,23 @@ function summarizeRevisionConfig(report: RevisionConfigReport): string {
   return report.parsedConfigResult.ok ? "incomplete" : "missing";
 }
 
+function summarizeRevisionPrompt(report: RevisionConfigReport): string {
+  if (!report.parsedConfigResult.ok) {
+    return "unavailable";
+  }
+
+  const configuredPath = report.parsedConfigResult.value.revision.instructionPrompt;
+
+  if (configuredPath === undefined) {
+    return "default";
+  }
+
+  return report.readinessResult.ok ||
+    report.readinessResult.error.code !== "revision_instruction_prompt_unreadable"
+    ? "custom file"
+    : "action required";
+}
+
 function renderRecommendedCheck(
   report: DoctorReport,
   code: "alphaxiv" | "web_search"
@@ -321,7 +425,7 @@ function renderActionHint(
 
 function resolveConfigAction(
   report: DoctorReport,
-  sectionId: Exclude<ConfigSectionId, "revision-provider">
+  sectionId: Exclude<ConfigSectionId, "revision-provider" | "revision-prompt">
 ): FeynmanRemediationAction | undefined {
   if (sectionId === "review-runtime") {
     return report.readinessReport.checks.find(
@@ -342,6 +446,59 @@ function resolveConfigAction(
   )?.remediation;
 
   return normalizeConfigAction(action);
+}
+
+async function saveRevisionPromptPath(input: {
+  report: RevisionConfigReport;
+  promptPathDraft: string;
+  cwd: string;
+  saveConfig: typeof saveUraniborgConfig;
+}): Promise<void> {
+  if (!input.report.parsedConfigResult.ok) {
+    throw new Error(
+      "Configure the revision provider first before setting a custom revision prompt."
+    );
+  }
+
+  const trimmedDraft = input.promptPathDraft.trim();
+  const nextPrompt =
+    trimmedDraft.length === 0
+      ? undefined
+      : {
+          sourceFile: resolvePathFromCwd(trimmedDraft, input.cwd)
+        };
+
+  if (
+    nextPrompt !== undefined &&
+    !isMarkdownFilePath(nextPrompt.sourceFile)
+  ) {
+    throw new Error("Revision prompt must point to a Markdown file.");
+  }
+
+  const currentConfig = input.report.parsedConfigResult.value;
+  const nextRevision =
+    nextPrompt === undefined
+      ? {
+          profile: currentConfig.revision.profile,
+          auth: currentConfig.revision.auth,
+          credentialBinding: currentConfig.revision.credentialBinding,
+          ...(currentConfig.revision.providerContext === undefined
+            ? {}
+            : {
+                providerContext: currentConfig.revision.providerContext
+              }),
+          endpoint: currentConfig.revision.endpoint,
+          defaults: currentConfig.revision.defaults
+        }
+      : {
+          ...currentConfig.revision,
+          instructionPrompt: nextPrompt
+        };
+
+  await input.saveConfig(input.report.configFilePath, {
+    ...currentConfig,
+    revision: nextRevision
+  });
 }
 
 function normalizeConfigAction(

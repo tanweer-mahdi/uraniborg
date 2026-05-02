@@ -8,6 +8,7 @@ import {
   resolveRevisionSetupReadiness,
   saveUraniborgConfig
 } from "../../src/config/app-config.js";
+import { URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT } from "../../src/refine/refinement.js";
 import type {
   UraniborgConfig,
   UraniborgConfigReadWriter
@@ -123,8 +124,8 @@ describe("parseUraniborgConfig", () => {
 
 describe("loadUraniborgConfig", () => {
   it("loads a valid current config and resolves Pi-managed runtime", async () => {
-    const readWriter = createMemoryReadWriter(
-      JSON.stringify(
+    const readWriter = createMemoryReadWriter({
+      "/tmp/config.json": JSON.stringify(
         createTestUraniborgConfig({
           profileId: "openai-codex-chatgpt",
           model: "gpt-5.4",
@@ -133,7 +134,7 @@ describe("loadUraniborgConfig", () => {
           }
         })
       )
-    );
+    });
 
     const result = await loadUraniborgConfig(
       "/tmp/config.json",
@@ -156,6 +157,86 @@ describe("loadUraniborgConfig", () => {
     if (result.ok) {
       expect(result.value.revision.runtime.kind).toBe("pi-managed");
       expect(result.value.revision.runtime.providerId).toBe("openai-codex");
+      expect(result.value.revision.instructionPrompt).toEqual({
+        source: "default",
+        effectiveInstruction: URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT
+      });
+    }
+  });
+
+  it("loads a valid custom revision prompt file into the resolved config", async () => {
+    const readWriter = createMemoryReadWriter({
+      "/tmp/config.json": JSON.stringify(
+        createTestUraniborgConfig({
+          profileId: "claude-browser",
+          model: "claude-sonnet-4-5",
+          instructionPrompt: {
+            sourceFile: "/tmp/prompts/revision.md"
+          }
+        })
+      ),
+      "/tmp/prompts/revision.md": "Focus on argument flow.\nReject vague reviewer asks.\n"
+    });
+
+    const result = await loadUraniborgConfig(
+      "/tmp/config.json",
+      {},
+      readWriter,
+      {
+        async loginManagedCredential() {
+          throw new Error("Login should not run during config load.");
+        },
+        async resolveManagedCredential() {
+          return ok({
+            providerId: "anthropic"
+          });
+        }
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.revision.instructionPrompt).toEqual({
+        source: "file",
+        configuredPath: "/tmp/prompts/revision.md",
+        effectiveInstruction:
+          "Focus on argument flow.\nReject vague reviewer asks."
+      });
+    }
+  });
+
+  it("fails loudly when the configured custom revision prompt file cannot be read", async () => {
+    const readWriter = createMemoryReadWriter({
+      "/tmp/config.json": JSON.stringify(
+        createTestUraniborgConfig({
+          profileId: "claude-browser",
+          model: "claude-sonnet-4-5",
+          instructionPrompt: {
+            sourceFile: "/tmp/prompts/missing.md"
+          }
+        })
+      )
+    });
+
+    const result = await loadUraniborgConfig(
+      "/tmp/config.json",
+      {},
+      readWriter,
+      {
+        async loginManagedCredential() {
+          throw new Error("Login should not run during config load.");
+        },
+        async resolveManagedCredential() {
+          return ok({
+            providerId: "anthropic"
+          });
+        }
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe("revision_instruction_prompt_unreadable");
     }
   });
 
@@ -176,14 +257,14 @@ describe("loadUraniborgConfig", () => {
   });
 
   it("loads parsed config without requiring runtime credential resolution", async () => {
-    const readWriter = createMemoryReadWriter(
-      JSON.stringify(
+    const readWriter = createMemoryReadWriter({
+      "/tmp/config.json": JSON.stringify(
         createTestUraniborgConfig({
           profileId: "claude-browser",
           model: "claude-sonnet-4-5"
         })
       )
-    );
+    });
 
     const result = await loadParsedUraniborgConfig("/tmp/config.json", readWriter);
 
@@ -226,8 +307,8 @@ describe("loadUraniborgConfig", () => {
   it("keeps stale setup-seed loads rejected so setup can restart cleanly", async () => {
     const result = await loadSetupSeedUraniborgConfig(
       "/tmp/config.json",
-      createMemoryReadWriter(
-        JSON.stringify({
+      createMemoryReadWriter({
+        "/tmp/config.json": JSON.stringify({
           version: 2,
           revision: {
             providerFamily: "openai-codex",
@@ -246,7 +327,7 @@ describe("loadUraniborgConfig", () => {
             }
           }
         })
-      )
+      })
     );
 
     expect(result.ok).toBe(false);
@@ -342,9 +423,17 @@ describe("resolveRevisionSetupReadiness", () => {
   });
 });
 
-function createMemoryReadWriter(fileContents: string): UraniborgConfigReadWriter {
+function createMemoryReadWriter(
+  files: Record<string, string>
+): UraniborgConfigReadWriter {
   return {
-    async readFile(): Promise<string> {
+    async readFile(configFilePath: string): Promise<string> {
+      const fileContents = files[configFilePath];
+
+      if (fileContents === undefined) {
+        throw createNodeError("ENOENT", `Missing file at ${configFilePath}.`);
+      }
+
       return fileContents;
     },
     async writeFile(): Promise<void> {}

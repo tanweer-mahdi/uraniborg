@@ -16,7 +16,13 @@ vi.mock("@mariozechner/pi-ai", async () => {
 });
 
 import { runResumeCommand } from "../../src/cli/commands/resume.js";
-import { createRunManifest, readRunManifest, writeRunManifest } from "../../src/run/manifest.js";
+import {
+  createRunConfigSnapshot,
+  createRunManifest,
+  readRunManifest,
+  writeRunConfigSnapshot,
+  writeRunManifest
+} from "../../src/run/manifest.js";
 import {
   resolveIterationArtifactPaths,
   resolveRunArtifactPaths
@@ -107,6 +113,15 @@ Reason: Not available
         }
       }
     );
+    await writeResumeConfigSnapshot(runArtifacts.configSnapshotFile, {
+      sourcePath: "/tmp/idea.md",
+      title: "Idea",
+      slug: "idea",
+      selectedModels: {
+        review: "openai/gpt-5.4",
+        refine: "gpt-5.4"
+      }
+    });
 
     await runResumeCommand(
       "2026-04-24T00-00-00Z-idea",
@@ -269,6 +284,15 @@ Reason: Not available
         }
       }
     );
+    await writeResumeConfigSnapshot(runArtifacts.configSnapshotFile, {
+      sourcePath: "/tmp/idea.md",
+      title: "Idea",
+      slug: "idea",
+      selectedModels: {
+        review: "openai/gpt-5.4",
+        refine: "gpt-5.4"
+      }
+    });
 
     await expect(
       runResumeCommand(
@@ -350,6 +374,15 @@ Reason: Not available
         }
       }
     );
+    await writeResumeConfigSnapshot(runArtifacts.configSnapshotFile, {
+      sourcePath: "/tmp/idea.md",
+      title: "Idea",
+      slug: "idea",
+      selectedModels: {
+        review: "openai/gpt-5.4",
+        refine: "gpt-5.4"
+      }
+    });
 
     await expect(
       runResumeCommand(
@@ -540,6 +573,15 @@ Reason: Not available
         }
       }
     );
+    await writeResumeConfigSnapshot(runArtifacts.configSnapshotFile, {
+      sourcePath: "/tmp/idea.md",
+      title: "Idea",
+      slug: "idea",
+      selectedModels: {
+        review: "openai/gpt-5.4",
+        refine: "gpt-5.4"
+      }
+    });
 
     await runResumeCommand(
       "2026-04-24T00-00-00Z-idea",
@@ -769,6 +811,15 @@ Reason: Not available
         }
       }
     );
+    await writeResumeConfigSnapshot(runArtifacts.configSnapshotFile, {
+      sourcePath: "/tmp/idea.md",
+      title: "Idea",
+      slug: "idea",
+      selectedModels: {
+        review: "openai/gpt-5.4",
+        refine: "gpt-5.4"
+      }
+    });
 
     await runResumeCommand(
       "2026-04-24T00-00-00Z-idea",
@@ -943,6 +994,311 @@ Reason: Not available
     });
   });
 
+  it("reuses the snapshotted revision instruction when the configured prompt file changes later", async () => {
+    const temporaryRoot = await mkdtemp(path.join(tmpdir(), "uraniborg-resume-"));
+    temporaryRoots.push(temporaryRoot);
+
+    const completeSimpleMock = vi.mocked(completeSimple);
+    completeSimpleMock.mockResolvedValueOnce({
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: `=== REFINED_DRAFT ===
+# Draft
+
+Prompt-stable revision.
+
+=== CHANGE_SUMMARY ===
+## Accepted reviewer points
+- Tighten the main claim
+
+## Rejected reviewer points
+- Add unsupported benchmark
+Reason: Not available
+
+## Changes made
+- Reworked the framing
+
+## Open issues
+- Evaluation still needs evidence
+
+## Regression guards
+- Do not invent numbers`
+        }
+      ],
+      api: "anthropic-messages",
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      responseId: "msg_resume_prompt_1",
+      usage: {
+        input: 10,
+        output: 20,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 30,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0
+        }
+      },
+      stopReason: "stop",
+      timestamp: Date.now()
+    });
+
+    const homeDirectory = path.join(temporaryRoot, "home");
+    const runsDirectory = path.join(homeDirectory, ".uraniborg", "runs");
+    const runArtifacts = resolveRunArtifactPaths(
+      runsDirectory,
+      "2026-04-24T00-00-00Z-idea"
+    );
+    const iterationArtifacts = resolveIterationArtifactPaths(
+      runArtifacts.runDirectory,
+      1
+    );
+
+    await mkdir(iterationArtifacts.iterationDirectory, { recursive: true });
+    await writeFile(runArtifacts.originalDraftFile, "# Draft\n\nInitial.\n", "utf8");
+    await writeFile(runArtifacts.currentDraftFile, "# Draft\n\nInitial.\n", "utf8");
+    await writeFile(runArtifacts.informationHighwayFile, "", "utf8");
+    await writeFile(
+      iterationArtifacts.reviewFile,
+      "Peer review: tighten the main claim.\n",
+      "utf8"
+    );
+    await writeRunManifest(
+      runArtifacts.manifestFile,
+      {
+        ...createRunManifest({
+          runId: "2026-04-24T00-00-00Z-idea",
+          slug: "idea",
+          title: "Idea",
+          sourceInputPath: "/tmp/idea.md",
+          iterationsPlanned: 1,
+          selectedModels: {
+            review: "openai/gpt-5.4",
+            refine: "claude-sonnet-4-5"
+          },
+          artifactPaths: runArtifacts,
+          createdAt: "2026-04-24T00:00:00.000Z"
+        }),
+        status: "failed",
+        phase: "failed",
+        updatedAt: "2026-04-24T00:10:00.000Z",
+        phaseMetadata: {
+          currentIteration: 1,
+          currentPhaseStartedAt: "2026-04-24T00:10:00.000Z",
+          resumeFromStatus: "refine_running"
+        },
+        lastError: {
+          code: "run_cancelled",
+          message: "Interrupted during refinement.",
+          timestamp: "2026-04-24T00:10:00.000Z"
+        }
+      }
+    );
+
+    const snapshottedConfig = createResolvedTestUraniborgConfig({
+      profileId: "claude-browser",
+      binding: {
+        type: "pi-auth-storage",
+        providerId: "anthropic"
+      },
+      model: "claude-sonnet-4-5",
+      instructionPrompt: {
+        sourceFile: "/tmp/prompts/revision-old.md"
+      }
+    });
+    snapshottedConfig.revision.instructionPrompt = {
+      source: "file",
+      configuredPath: "/tmp/prompts/revision-old.md",
+      effectiveInstruction: "Old guidance: prioritize argument flow."
+    };
+
+    await writeResumeConfigSnapshot(runArtifacts.configSnapshotFile, {
+      sourcePath: "/tmp/idea.md",
+      title: "Idea",
+      slug: "idea",
+      selectedModels: {
+        review: "openai/gpt-5.4",
+        refine: "claude-sonnet-4-5"
+      },
+      config: snapshottedConfig
+    });
+
+    await runResumeCommand(
+      "2026-04-24T00-00-00Z-idea",
+      {
+        nonInteractive: true
+      },
+      {
+        resolvePaths() {
+          return {
+            homeDirectory,
+            appHomeDirectory: path.join(homeDirectory, ".uraniborg"),
+            configFile: path.join(homeDirectory, ".uraniborg", "config.json"),
+            vendorDirectory: path.join(homeDirectory, ".uraniborg", "vendor"),
+            feynmanRuntimeDirectory: path.join(
+              homeDirectory,
+              ".uraniborg",
+              "vendor",
+              "feynman"
+            ),
+            feynmanRuntimeManifestFile: path.join(
+              homeDirectory,
+              ".uraniborg",
+              "vendor",
+              "feynman",
+              "runtime.json"
+            ),
+            runsDirectory
+          };
+        },
+        async loadConfig() {
+          const latestConfig = createResolvedTestUraniborgConfig({
+            profileId: "claude-browser",
+            binding: {
+              type: "pi-auth-storage",
+              providerId: "anthropic"
+            },
+            model: "claude-sonnet-4-5",
+            instructionPrompt: {
+              sourceFile: "/tmp/prompts/revision-new.md"
+            }
+          });
+          latestConfig.revision.instructionPrompt = {
+            source: "file",
+            configuredPath: "/tmp/prompts/revision-new.md",
+            effectiveInstruction: "New guidance: optimize for style only."
+          };
+
+          return ok(latestConfig);
+        },
+        authClient: {
+          async loginManagedCredential() {
+            throw new Error("Resume should not trigger browser login.");
+          },
+          async resolveManagedCredential() {
+            throw new Error("Resume should not resolve managed credential state directly.");
+          },
+          async resolveManagedModel(providerId, modelId) {
+            return ok({
+              providerId,
+              model: {
+                id: modelId,
+                name: modelId,
+                provider: providerId,
+                api: "anthropic-messages",
+                baseUrl: "https://api.anthropic.com",
+                input: ["text"],
+                reasoning: true,
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0
+                },
+                contextWindow: 200000,
+                maxTokens: 8192
+              },
+              apiKey: "oauth-token",
+              headers: {
+                "x-test": "managed"
+              }
+            });
+          },
+          listAvailableModelIds() {
+            return ["claude-sonnet-4-5"];
+          }
+        },
+        async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
+          return {
+            ready: true,
+            code: "ready",
+            executablePath: "/tmp/feynman",
+            detectedVersion: "1.2.3",
+            warnings: [],
+            candidates: [
+              {
+                executablePath: "/tmp/feynman",
+                compatible: true,
+                detectedVersion: "1.2.3",
+                details: ["Version: 1.2.3"]
+              }
+            ]
+          };
+        },
+        async listModels() {
+          return {
+            executablePath: "/tmp/feynman",
+            args: ["model", "list"],
+            exitCode: 0,
+            stdout: JSON.stringify(["openai/gpt-5.4"]),
+            stderr: ""
+          };
+        },
+        async getAlphaStatus() {
+          return {
+            executablePath: "/tmp/feynman",
+            args: ["alpha", "status"],
+            exitCode: 0,
+            stdout: "AlphaXiv ready",
+            stderr: ""
+          };
+        },
+        async getSearchStatus() {
+          return {
+            executablePath: "/tmp/feynman",
+            args: ["search", "status"],
+            exitCode: 0,
+            stdout: "Web search ready",
+            stderr: ""
+          };
+        },
+        async ensureAppHome(paths) {
+          await mkdir(paths.appHomeDirectory, { recursive: true });
+          await mkdir(paths.vendorDirectory, { recursive: true });
+          await mkdir(paths.feynmanRuntimeDirectory, { recursive: true });
+          await mkdir(paths.runsDirectory, { recursive: true });
+
+          return {
+            paths,
+            appHome: {
+              kind: "directory",
+              path: paths.appHomeDirectory
+            },
+            vendor: {
+              kind: "directory",
+              path: paths.vendorDirectory
+            },
+            feynmanRuntime: {
+              kind: "directory",
+              path: paths.feynmanRuntimeDirectory
+            },
+            runs: {
+              kind: "directory",
+              path: paths.runsDirectory
+            },
+            isLayoutValid: true
+          };
+        },
+        writeLine() {
+          return undefined;
+        }
+      }
+    );
+
+    expect(
+      completeSimpleMock.mock.calls.at(-1)?.[1].systemPrompt
+    ).toContain("Old guidance: prioritize argument flow.");
+    expect(
+      completeSimpleMock.mock.calls.at(-1)?.[1].systemPrompt
+    ).not.toContain("New guidance: optimize for style only.");
+  });
+
   it("resumes a cancelled memory-update run using the recorded resumable phase", async () => {
     const temporaryRoot = await mkdtemp(path.join(tmpdir(), "uraniborg-resume-"));
     temporaryRoots.push(temporaryRoot);
@@ -1018,6 +1374,15 @@ Reason: Not available
         }
       }
     );
+    await writeResumeConfigSnapshot(runArtifacts.configSnapshotFile, {
+      sourcePath: "/tmp/idea.md",
+      title: "Idea",
+      slug: "idea",
+      selectedModels: {
+        review: "openai/gpt-5.4",
+        refine: "gpt-5.4"
+      }
+    });
 
     await runResumeCommand(
       "2026-04-24T00-00-00Z-idea",
@@ -1151,4 +1516,30 @@ function createResolvedConfig() {
     },
     model: "gpt-5.4"
   });
+}
+
+async function writeResumeConfigSnapshot(
+  snapshotPath: string,
+  input: {
+    sourcePath: string;
+    title: string;
+    slug: string;
+    selectedModels: {
+      review: string;
+      refine: string;
+    };
+    config?: ReturnType<typeof createResolvedConfig>;
+  }
+): Promise<void> {
+  await writeRunConfigSnapshot(
+    snapshotPath,
+    createRunConfigSnapshot({
+      config: input.config ?? createResolvedConfig(),
+      sourcePath: input.sourcePath,
+      title: input.title,
+      slug: input.slug,
+      iterationCount: 1,
+      selectedModels: input.selectedModels
+    })
+  );
 }

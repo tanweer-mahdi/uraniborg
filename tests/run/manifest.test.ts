@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createRunConfigSnapshot,
   createRunManifest,
+  readRunConfigSnapshot,
   readRunManifest,
   writeRunConfigSnapshot,
   writeRunManifest
@@ -111,6 +112,10 @@ describe("run manifest", () => {
       },
       timeoutMs: 60000
     });
+    expect(snapshot.revisionPrompt).toEqual({
+      source: "default",
+      effectiveInstruction: "Default revision instruction"
+    });
   });
 
   it("persists config snapshots as JSON artifacts", async () => {
@@ -144,6 +149,11 @@ describe("run manifest", () => {
             accountId: "acct_123"
           },
           timeoutMs: 60000
+        },
+        revisionPrompt: {
+          source: "file",
+          configuredPath: "/work/prompts/revision.md",
+          effectiveInstruction: "Revise for argument clarity."
         }
       },
       memoryFilesystem
@@ -152,6 +162,58 @@ describe("run manifest", () => {
     expect(
       memoryFilesystem.files.get("/tmp/runs/run-1/config.snapshot.json")
     ).toContain("\"iterationCount\": 2");
+    await expect(
+      readRunConfigSnapshot(
+        "/tmp/runs/run-1/config.snapshot.json",
+        memoryFilesystem
+      )
+    ).resolves.toMatchObject({
+      revisionPrompt: {
+        source: "file",
+        configuredPath: "/work/prompts/revision.md"
+      }
+    });
+  });
+
+  it("reads older config snapshots without revision prompt provenance", async () => {
+    const memoryFilesystem = createMemoryRunFilesystem({
+      "/tmp/runs/run-1/config.snapshot.json": JSON.stringify({
+        input: {
+          sourcePath: "/work/draft.md",
+          title: "Draft",
+          slug: "draft"
+        },
+        iterationCount: 2,
+        selectedModels: {
+          review: "review-model",
+          refine: "refine-model"
+        },
+        resolvedDefaults: {
+          model: "gpt-5",
+          temperature: 0.2
+        },
+        revisionRuntime: {
+          profileId: "openai-codex-chatgpt",
+          profileLabel: "OpenAI/Codex",
+          authClass: "oauth",
+          acquisition: "browser-login",
+          credentialBindingType: "pi-auth-storage",
+          baseUrl: "https://chatgpt.com/backend-api",
+          timeoutMs: 60000
+        }
+      })
+    });
+
+    await expect(
+      readRunConfigSnapshot(
+        "/tmp/runs/run-1/config.snapshot.json",
+        memoryFilesystem
+      )
+    ).resolves.toMatchObject({
+      revisionPrompt: {
+        source: "default"
+      }
+    });
   });
 
   it("rejects invalid manifest JSON and schema", async () => {

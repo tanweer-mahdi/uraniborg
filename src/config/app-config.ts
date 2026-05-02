@@ -1,5 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 
 import { z } from "zod";
 
@@ -7,13 +8,16 @@ import {
   createRevisionAuthClient,
   type RevisionAuthClient
 } from "./revision-auth.js";
+import { isMarkdownFilePath } from "./paths.js";
 import {
   getRevisionProfile,
   supportsRevisionAuthStrategy,
   type UraniborgRevisionProfileId
 } from "./revision-profiles.js";
+import { URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT } from "../refine/refinement.js";
 import type {
   ResolvedUraniborgConfig,
+  ResolvedUraniborgRevisionInstructionPrompt,
   UraniborgConfig,
   UraniborgConfigLoadError,
   UraniborgConfigReadWriter,
@@ -31,6 +35,17 @@ const refineDefaultsSchema = z.object({
   model: z.string().trim().min(1),
   temperature: z.number().min(0).max(2).default(0.2),
   maxOutputTokens: z.number().int().positive().optional()
+});
+
+const revisionInstructionPromptSchema = z.object({
+  sourceFile: z
+    .string()
+    .trim()
+    .min(1)
+    .refine(
+      (value) => path.isAbsolute(value) && isMarkdownFilePath(value),
+      "Custom revision instruction prompt must be an absolute Markdown file path."
+    )
 });
 
 const revisionConfigSchema = z
@@ -58,6 +73,7 @@ const revisionConfigSchema = z
         projectId: z.string().trim().min(1).optional()
       })
       .optional(),
+    instructionPrompt: revisionInstructionPromptSchema.optional(),
     endpoint: z.object({
       baseUrl: z.string().url(),
       timeoutMs: z.number().int().positive().default(60000)
@@ -162,10 +178,11 @@ export async function loadSetupSeedUraniborgConfig(
 export function resolveRevisionSetupReadiness(
   config: UraniborgConfig,
   environment: NodeJS.ProcessEnv,
-  authClient: RevisionAuthClient
-): Promise<Result<UraniborgConfig, UraniborgConfigLoadError>> {
+  authClient: RevisionAuthClient,
+  readWriter: UraniborgConfigReadWriter = createNodeConfigReadWriter()
+): Promise<Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>> {
   void environment;
-  return resolveRevisionSetupReadinessInternal(config, authClient);
+  return resolveExecutableUraniborgConfig(config, authClient, readWriter);
 }
 
 export async function loadUraniborgConfig(
@@ -185,7 +202,11 @@ export async function loadUraniborgConfig(
     return parsedConfigResult;
   }
 
-  return resolveExecutableUraniborgConfig(parsedConfigResult.value, authClient);
+  return resolveExecutableUraniborgConfig(
+    parsedConfigResult.value,
+    authClient,
+    readWriter
+  );
 }
 
 export async function loadParsedUraniborgConfig(
@@ -212,7 +233,7 @@ export async function loadRevisionSetupReadiness(
   environment: NodeJS.ProcessEnv = process.env,
   authClient: RevisionAuthClient = createRevisionAuthClient(),
   readWriter: UraniborgConfigReadWriter = createNodeConfigReadWriter()
-): Promise<Result<UraniborgConfig, UraniborgConfigLoadError>> {
+): Promise<Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>> {
   void environment;
 
   const parsedConfigResult = await loadParsedUraniborgConfig(
@@ -224,7 +245,11 @@ export async function loadRevisionSetupReadiness(
     return parsedConfigResult;
   }
 
-  return resolveRevisionSetupReadinessInternal(parsedConfigResult.value, authClient);
+  return resolveExecutableUraniborgConfig(
+    parsedConfigResult.value,
+    authClient,
+    readWriter
+  );
 }
 
 export async function saveUraniborgConfig(
@@ -357,7 +382,8 @@ async function resolveRevisionSetupReadinessInternal(
 
 async function resolveExecutableUraniborgConfig(
   config: UraniborgConfig,
-  authClient: RevisionAuthClient
+  authClient: RevisionAuthClient,
+  readWriter: UraniborgConfigReadWriter
 ): Promise<Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>> {
   const readinessResult = await resolveRevisionSetupReadinessInternal(
     config,
@@ -368,10 +394,20 @@ async function resolveExecutableUraniborgConfig(
     return readinessResult;
   }
 
+  const instructionPromptResult = await resolveRevisionInstructionPrompt(
+    config,
+    readWriter
+  );
+
+  if (!instructionPromptResult.ok) {
+    return instructionPromptResult;
+  }
+
   return ok({
     ...config,
     revision: {
       ...config.revision,
+      instructionPrompt: instructionPromptResult.value,
       runtime: {
         kind: "pi-managed",
         providerId: config.revision.credentialBinding.providerId
@@ -414,6 +450,52 @@ function looksLikeUnsupportedLegacyRevisionConfig(input: Record<string, unknown>
   }
 
   return false;
+}
+
+async function resolveRevisionInstructionPrompt(
+  config: UraniborgConfig,
+  readWriter: UraniborgConfigReadWriter
+): Promise<
+  Result<ResolvedUraniborgRevisionInstructionPrompt, UraniborgConfigLoadError>
+> {
+  const configuredPrompt = config.revision.instructionPrompt;
+
+  if (configuredPrompt === undefined) {
+    return ok({
+      source: "default",
+      effectiveInstruction: URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT
+    });
+  }
+
+  try {
+    const fileContents = await readWriter.readFile(configuredPrompt.sourceFile);
+    const effectiveInstruction = fileContents.trim();
+
+    if (effectiveInstruction.length === 0) {
+      return err({
+        code: "revision_instruction_prompt_unreadable",
+        message: `Custom revision instruction prompt at "${configuredPrompt.sourceFile}" is empty.`,
+        details: [
+          "Provide Markdown revision guidance in the configured file or clear the custom prompt path to use Uraniborg's default revision instruction."
+        ]
+      });
+    }
+
+    return ok({
+      source: "file",
+      configuredPath: configuredPrompt.sourceFile,
+      effectiveInstruction
+    });
+  } catch (error) {
+    return err({
+      code: "revision_instruction_prompt_unreadable",
+      message: `Custom revision instruction prompt could not be read from "${configuredPrompt.sourceFile}".`,
+      details: [
+        error instanceof Error ? error.message : "Unknown prompt-file read failure.",
+        "Fix the configured path in Uraniborg Config or clear it to fall back to Uraniborg's default revision instruction."
+      ]
+    });
+  }
 }
 
 function describeUnsupportedLegacyRevisionConfig(

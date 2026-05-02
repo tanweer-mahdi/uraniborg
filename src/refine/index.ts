@@ -1,5 +1,6 @@
 export {
-  URANIBORG_REFINEMENT_SYSTEM_PROMPT,
+  URANIBORG_DEFAULT_REVISION_GUIDANCE_PROMPT,
+  URANIBORG_FIXED_REVISION_OUTPUT_PROMPT,
   buildRefinePrompt,
   parseRefinementOutput,
   type ExecuteRefinementInput,

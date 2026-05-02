@@ -14,7 +14,11 @@ import {
   resolveUraniborgPaths
 } from "../../config/index.js";
 import { resumeRunLifecycle } from "../../loop/index.js";
-import { readRunManifest, resolveRunArtifactPaths } from "../../run/index.js";
+import {
+  readRunConfigSnapshot,
+  readRunManifest,
+  resolveRunArtifactPaths
+} from "../../run/index.js";
 import {
   createSerializedFeynmanCommandRunner,
   createNodeFeynmanCommandRunner,
@@ -24,6 +28,7 @@ import {
   listFeynmanModels,
   type FeynmanRuntimeStatus
 } from "../../review/index.js";
+import type { ResolvedUraniborgConfig } from "../../types/app-config.js";
 import { writeInfo } from "../../ui/output.js";
 import {
   prepareRunEnvironment,
@@ -72,9 +77,14 @@ export async function runResumeCommand(
   const manifestPath = resolveRunArtifactPaths(paths.runsDirectory, runId).manifestFile;
 
   let manifest;
+  let configSnapshot;
 
   try {
     manifest = await readRunManifest(manifestPath, dependencies.filesystem);
+    configSnapshot = await readRunConfigSnapshot(
+      resolveRunArtifactPaths(paths.runsDirectory, runId).configSnapshotFile,
+      dependencies.filesystem
+    );
   } catch (error) {
     throw new Error(
       error instanceof Error
@@ -111,11 +121,16 @@ export async function runResumeCommand(
     }
   );
 
+  const resumedConfig = applySnapshottedRevisionInstruction(
+    preparedEnvironment.config,
+    configSnapshot.revisionPrompt
+  );
+
   await executeWithProcessCancellation(async (signal) => {
     await resumeRunLifecycle(
       {
         runId,
-        config: preparedEnvironment.config,
+        config: resumedConfig,
         runsDirectory: preparedEnvironment.paths.runsDirectory,
         reviewExecutablePath: requireRuntimeExecutablePath(
           preparedEnvironment.runtimeStatus
@@ -132,6 +147,31 @@ export async function runResumeCommand(
       }
     );
   });
+}
+
+function applySnapshottedRevisionInstruction(
+  config: ResolvedUraniborgConfig,
+  revisionPrompt: {
+    source: "default" | "file";
+    configuredPath?: string | undefined;
+    effectiveInstruction: string;
+  }
+): ResolvedUraniborgConfig {
+  return {
+    ...config,
+    revision: {
+      ...config.revision,
+      instructionPrompt: {
+        source: revisionPrompt.source,
+        ...(revisionPrompt.configuredPath === undefined
+          ? {}
+          : {
+              configuredPath: revisionPrompt.configuredPath
+            }),
+        effectiveInstruction: revisionPrompt.effectiveInstruction
+      }
+    }
+  };
 }
 
 function requireRuntimeExecutablePath(

@@ -61,7 +61,12 @@ export async function executeRefinement(
 
   const modelResolution = modelResolutionResult.value;
 
-  const prompt = buildRefinePrompt(input);
+  const prompt = buildRefinePrompt({
+    currentDraft: input.currentDraft,
+    peerReview: input.peerReview,
+    informationHighway: input.informationHighway,
+    revisionInstruction: input.config.revision.instructionPrompt.effectiveInstruction
+  });
   const context: Context = {
     systemPrompt: prompt.systemPrompt,
     messages: [

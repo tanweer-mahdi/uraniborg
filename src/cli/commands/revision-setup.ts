@@ -121,6 +121,7 @@ export async function runGuidedRevisionSetup(
     credentialBinding: credentialResult.credentialBinding,
     timeoutMs: initialConfig.revision.endpoint.timeoutMs,
     providerContext: credentialResult.providerContext,
+    instructionPrompt: initialConfig.revision.instructionPrompt,
     defaults: {
       model: defaultModel,
       temperature: initialConfig.revision.defaults.temperature,
@@ -181,6 +182,7 @@ export function createConfig(options: {
   timeoutMs: number;
   defaults: UraniborgConfig["revision"]["defaults"];
   providerContext?: UraniborgConfig["revision"]["providerContext"];
+  instructionPrompt?: UraniborgConfig["revision"]["instructionPrompt"];
 }): UraniborgConfig {
   const profile = getRevisionProfile(options.profileId);
 
@@ -201,6 +203,11 @@ export function createConfig(options: {
         ? {}
         : {
             providerContext: options.providerContext
+          }),
+      ...(options.instructionPrompt === undefined
+        ? {}
+        : {
+            instructionPrompt: options.instructionPrompt
           }),
       endpoint: {
         baseUrl: profile.canonicalBaseUrl,

@@ -173,6 +173,9 @@ function createRunDetail(): RunDetailViewModel {
       review: "openai-codex/gpt-5.2",
       refine: "gpt-5.2"
     },
+    revisionPrompt: {
+      source: "default"
+    },
     iterationsPlanned: 2,
     iterationsCompleted: 1,
     currentIteration: 2,

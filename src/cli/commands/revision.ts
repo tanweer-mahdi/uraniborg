@@ -8,6 +8,7 @@ import {
 } from "../../config/index.js";
 import { getRevisionProfileLabel } from "../../config/revision-profiles.js";
 import type {
+  ResolvedUraniborgConfig,
   UraniborgConfig,
   UraniborgConfigLoadError
 } from "../../types/app-config.js";
@@ -32,7 +33,7 @@ export interface RevisionCommandDependencies extends RevisionSetupDependencies {
 
 export interface RevisionConfigReport {
   configFilePath: string;
-  readinessResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
+  readinessResult: Result<ResolvedUraniborgConfig, UraniborgConfigLoadError>;
   parsedConfigResult: Result<UraniborgConfig, UraniborgConfigLoadError>;
 }
 
@@ -111,6 +112,7 @@ export function renderRevisionConfigReport(
     lines.push(`Config: ${report.configFilePath}`);
     lines.push(formatActiveProfileLine(report.readinessResult.value));
     lines.push(formatDefaultModelLine(report.readinessResult.value));
+    lines.push(...renderRevisionInstructionReport(report));
 
     return lines;
   }
@@ -120,6 +122,7 @@ export function renderRevisionConfigReport(
     lines.push(`Config: ${report.configFilePath}`);
     lines.push(formatActiveProfileLine(report.parsedConfigResult.value));
     lines.push(formatDefaultModelLine(report.parsedConfigResult.value));
+    lines.push(...renderRevisionInstructionReport(report));
     lines.push(`  ${report.readinessResult.error.message}`);
 
     for (const detail of report.readinessResult.error.details ?? []) {
@@ -149,13 +152,97 @@ export function renderRevisionConfigReport(
 }
 
 function formatActiveProfileLine(
-  config: Pick<UraniborgConfig, "revision">
+  config: {
+    revision: {
+      profile: Pick<UraniborgConfig["revision"]["profile"], "id">;
+    };
+  }
 ): string {
   return `Active profile: ${getRevisionProfileLabel(config.revision.profile.id)}`;
 }
 
 function formatDefaultModelLine(
-  config: Pick<UraniborgConfig, "revision">
+  config: {
+    revision: {
+      defaults: Pick<UraniborgConfig["revision"]["defaults"], "model">;
+    };
+  }
 ): string {
   return `Default model: ${config.revision.defaults.model}`;
+}
+
+export function renderRevisionInstructionReport(
+  report: RevisionConfigReport
+): readonly string[] {
+  if (report.readinessResult.ok) {
+    return formatRevisionInstructionLines(report.readinessResult.value);
+  }
+
+  if (!report.parsedConfigResult.ok) {
+    return ["Revision prompt: Uraniborg default guidance"];
+  }
+
+  const lines = formatConfiguredPromptPathLines(report.parsedConfigResult.value);
+
+  if (report.readinessResult.error.code !== "revision_instruction_prompt_unreadable") {
+    return lines;
+  }
+
+  return [
+    ...lines,
+    report.readinessResult.error.message,
+    ...(report.readinessResult.error.details ?? []).map((detail) => `  ${detail}`)
+  ];
+}
+
+function formatRevisionInstructionLines(
+  config: Pick<ResolvedUraniborgConfig, "revision">
+): readonly string[] {
+  if (config.revision.instructionPrompt.source === "default") {
+    return ["Revision prompt: Uraniborg default guidance"];
+  }
+
+  return [
+    "Revision prompt: custom guidance file",
+    `Prompt path: ${config.revision.instructionPrompt.configuredPath ?? "unknown"}`,
+    "Custom guidance preview:",
+    ...indentLines(
+      previewInstruction(config.revision.instructionPrompt.effectiveInstruction)
+    )
+  ];
+}
+
+function formatConfiguredPromptPathLines(
+  config: Pick<UraniborgConfig, "revision">
+): readonly string[] {
+  const configuredPath = config.revision.instructionPrompt?.sourceFile;
+
+  if (configuredPath === undefined) {
+    return ["Revision prompt: Uraniborg default guidance"];
+  }
+
+  return [
+    "Revision prompt: custom guidance file",
+    `Prompt path: ${configuredPath}`,
+    "Custom guidance preview: unavailable until the prompt file is readable."
+  ];
+}
+
+function previewInstruction(instruction: string): readonly string[] {
+  const lines = instruction
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(0, 6);
+
+  if (lines.length === 0) {
+    return ["(empty)"];
+  }
+
+  return lines;
+}
+
+function indentLines(lines: readonly string[]): readonly string[] {
+  return lines.map((line) => `  ${line}`);
 }
