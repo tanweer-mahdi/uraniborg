@@ -111,6 +111,11 @@ export function createRuntimeReadinessCheck(
   status: FeynmanRuntimeStatus
 ): FeynmanReadinessCheck {
   if (status.ready) {
+    const compatibilityWarning =
+      status.compatibility?.status === "warning"
+        ? status.compatibility.summary
+        : undefined;
+
     return {
       code: "runtime",
       tier: "required",
@@ -119,6 +124,9 @@ export function createRuntimeReadinessCheck(
       details: [
         ...(typeof status.detectedVersion === "string"
           ? [`Version: ${status.detectedVersion}`]
+          : []),
+        ...(typeof compatibilityWarning === "string"
+          ? [compatibilityWarning]
           : []),
         ...status.warnings
       ]
@@ -132,7 +140,7 @@ export function createRuntimeReadinessCheck(
       ready: false,
       summary: "No compatible Feynman runtime was found on PATH.",
       details: [
-        "Install Feynman or expose a compatible `feynman` executable on PATH before running Uraniborg."
+        "Install Feynman and ensure a compatible `feynman` executable is available on PATH before running Uraniborg."
       ]
     };
   }

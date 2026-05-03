@@ -1,4 +1,16 @@
 export {
+  TESTED_FEYNMAN_VERSION_RANGE,
+  applyCompatibilityToRuntimeStatus,
+  collectFeynmanCompatibilitySnapshot,
+  type FeynmanCompatibilityProbeCode,
+  type FeynmanCompatibilityProbeExecutions,
+  type FeynmanCompatibilityProbeOptions,
+  type FeynmanCompatibilityProbeResult,
+  type FeynmanCompatibilityProbeSnapshot,
+  type FeynmanCompatibilityReport,
+  type FeynmanCompatibilityStatus
+} from "./feynman-compatibility.js";
+export {
   collectFeynmanRuntimeSnapshot,
   createSerializedFeynmanCommandRunner,
   type FeynmanRuntimeSnapshot,

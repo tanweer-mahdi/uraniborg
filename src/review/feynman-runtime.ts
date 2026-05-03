@@ -5,6 +5,11 @@ import {
   type FeynmanRuntimeStatus
 } from "./feynman-bootstrap.js";
 import {
+  applyCompatibilityToRuntimeStatus,
+  collectFeynmanCompatibilitySnapshot,
+  type FeynmanCompatibilityReport
+} from "./feynman-compatibility.js";
+import {
   getFeynmanAlphaStatus,
   getFeynmanSearchStatus,
   listFeynmanModels
@@ -19,6 +24,7 @@ export interface FeynmanRuntimeSnapshot {
   modelListExecution?: FeynmanCommandExecution | undefined;
   alphaStatusExecution?: FeynmanCommandExecution | undefined;
   searchStatusExecution?: FeynmanCommandExecution | undefined;
+  compatibilityReport: FeynmanCompatibilityReport;
   readinessReport: FeynmanReadinessReport;
 }
 
@@ -64,9 +70,22 @@ export async function collectFeynmanRuntimeSnapshot(
     options.includeReviewModels ?? options.selectedReviewModel !== undefined;
   const includeCapabilities = options.includeCapabilities ?? false;
 
-  const runtimeStatus = await inspectRuntime(
+  const inspectedRuntimeStatus = await inspectRuntime(
     options.environment,
     options.runner
+  );
+  const compatibilitySnapshot = await collectFeynmanCompatibilitySnapshot(
+    inspectedRuntimeStatus,
+    {
+      listModels,
+      getAlphaStatus,
+      getSearchStatus,
+      runner: options.runner
+    }
+  );
+  const runtimeStatus = applyCompatibilityToRuntimeStatus(
+    inspectedRuntimeStatus,
+    compatibilitySnapshot.compatibilityReport
   );
   let modelListExecution: FeynmanCommandExecution | undefined;
   let alphaStatusExecution: FeynmanCommandExecution | undefined;
@@ -80,18 +99,18 @@ export async function collectFeynmanRuntimeSnapshot(
     }
 
     if (includeReviewModels) {
-      modelListExecution = await listModels(runtimeExecutablePath, options.runner);
+      modelListExecution =
+        compatibilitySnapshot.modelListExecution ??
+        (await listModels(runtimeExecutablePath, options.runner));
     }
 
     if (includeCapabilities) {
-      alphaStatusExecution = await getAlphaStatus(
-        runtimeExecutablePath,
-        options.runner
-      );
-      searchStatusExecution = await getSearchStatus(
-        runtimeExecutablePath,
-        options.runner
-      );
+      alphaStatusExecution =
+        compatibilitySnapshot.alphaStatusExecution ??
+        (await getAlphaStatus(runtimeExecutablePath, options.runner));
+      searchStatusExecution =
+        compatibilitySnapshot.searchStatusExecution ??
+        (await getSearchStatus(runtimeExecutablePath, options.runner));
     }
   }
 
@@ -100,6 +119,7 @@ export async function collectFeynmanRuntimeSnapshot(
     modelListExecution,
     alphaStatusExecution,
     searchStatusExecution,
+    compatibilityReport: compatibilitySnapshot.compatibilityReport,
     readinessReport: classifyFeynmanReadiness({
       runtimeStatus,
       modelListExecution,

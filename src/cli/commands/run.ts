@@ -60,7 +60,7 @@ export function registerRunCommand(program: Command): void {
       "--iterations <count>",
       `Number of review/refine iterations (${MIN_ITERATION_COUNT}-${MAX_ITERATION_COUNT}).`
     )
-    .option("--review-model <model>", "Review model exposed by embedded Feynman.")
+    .option("--review-model <model>", "Review model exposed by external Feynman.")
     .option(
       "--refine-model <model>",
       "Revision model name for the active revision profile."
@@ -299,6 +299,9 @@ export async function prepareRunEnvironment(
   let runtimeSnapshot = await collectFeynmanRuntimeSnapshot({
     environment: dependencies.environment,
     inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
     runner: dependencies.runner
   });
   let runtimeStatus = runtimeSnapshot.runtimeStatus;
@@ -323,6 +326,9 @@ export async function prepareRunEnvironment(
   runtimeSnapshot = await collectFeynmanRuntimeSnapshot({
     environment: dependencies.environment,
     inspectRuntime: dependencies.inspectRuntime,
+    listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
     runner: dependencies.runner
   });
   runtimeStatus = runtimeSnapshot.runtimeStatus;
@@ -337,6 +343,9 @@ export async function prepareRunEnvironment(
   dependencies.writeLine(
     `Using Feynman runtime: ${requireRuntimeExecutablePath(runtimeStatus)}${typeof runtimeStatus.detectedVersion === "string" ? ` (version ${runtimeStatus.detectedVersion})` : ""}.`
   );
+  for (const warning of runtimeStatus.warnings) {
+    dependencies.writeLine(`[warn] ${warning}`);
+  }
 
   dependencies.writeLine("Uraniborg checks revision setup...");
 
@@ -357,6 +366,8 @@ export async function prepareRunEnvironment(
     environment: dependencies.environment,
     inspectRuntime: dependencies.inspectRuntime,
     listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
     runner: dependencies.runner,
     includeReviewModels: true
   });
@@ -380,6 +391,8 @@ export async function prepareRunEnvironment(
     environment: dependencies.environment,
     inspectRuntime: dependencies.inspectRuntime,
     listModels: dependencies.listModels,
+    getAlphaStatus: dependencies.getAlphaStatus,
+    getSearchStatus: dependencies.getSearchStatus,
     runner: dependencies.runner,
     includeReviewModels: true
   });
