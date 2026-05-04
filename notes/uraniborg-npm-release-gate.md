@@ -251,24 +251,102 @@ A release candidate is publish-ready only if all of the following are true:
 
 ### Pre-release
 
-1. Run the build gate.
-2. Run the pack dry-run.
-3. Review the pack contents manually.
-4. Run smoke tests on each supported platform or a representative matrix.
-5. Confirm prerequisite docs match the observed runtime contract.
-6. Confirm the release notes and version bump are correct.
+1. Confirm the package name and scope.
+
+   ```bash
+   npm view uraniborg
+   ```
+
+   If the unscoped name is unavailable or an organization namespace is preferred, choose a scoped package name such as `@uraniborg/cli` or `@<owner>/uraniborg`. Scoped public packages require `npm publish --access public`.
+
+2. Confirm npm authentication and registry.
+
+   ```bash
+   npm whoami
+   npm config get registry
+   ```
+
+   The registry should be `https://registry.npmjs.org/`. If authentication fails, run `npm login`.
+
+3. Review package metadata.
+
+   Confirm `package.json` has the intended `name`, `version`, `description`, `license`, `bin`, `files`, `engines`, README, and LICENSE. Confirm the version is final; npm package versions cannot be republished once used.
+
+4. Run the full local release gate.
+
+   ```bash
+   npm run release:check
+   ```
+
+5. Inspect the package contents.
+
+   ```bash
+   npm pack --dry-run
+   ```
+
+   The dry-run must show only the expected package-facing files. It must not include `src/`, `tests/`, `notes/`, `openspec/`, or internal scripts.
+
+6. Optionally install the local tarball one final time.
+
+   ```bash
+   npm pack
+   npm install -g ./uraniborg-<version>.tgz
+   uraniborg --help
+   uraniborg doctor
+   uraniborg models
+   npm uninstall -g uraniborg
+   rm -f uraniborg-*.tgz
+   ```
+
+7. Run npm's publish simulation.
+
+   ```bash
+   npm publish --dry-run
+   ```
+
+   `--dry-run` does not upload the package or make it public. It simulates publish packaging and reports what npm would publish.
+
+8. Confirm prerequisite docs match the observed runtime contract.
+
+9. Confirm the release notes, version bump, and git state are correct.
 
 ### Publish
 
-1. Tag the release in git.
-2. Publish the package manually.
-3. Verify the published artifact installs and runs.
-4. Record the release outcome in the project history.
+1. Tag the release in git if the version is final.
+2. Publish manually:
+
+   ```bash
+   npm publish
+   ```
+
+   For a scoped public package:
+
+   ```bash
+   npm publish --access public
+   ```
+
+   If npm requires two-factor authentication, provide the one-time password when prompted or use `--otp <code>`.
+
+3. Verify the published package metadata:
+
+   ```bash
+   npm view uraniborg
+   ```
+
+4. Verify the published artifact installs and runs.
+5. Record the release outcome in the project history.
 
 ### Post-release
 
-1. Verify the install path from a clean environment.
-2. Verify the binary shim works.
+1. Verify the install path from a clean environment:
+
+   ```bash
+   npm install -g uraniborg
+   uraniborg --help
+   uraniborg doctor
+   ```
+
+2. Verify the binary shim works outside the source checkout.
 3. Verify the documented prerequisite path still matches reality.
 
 ## 12. Rollback Considerations
