@@ -318,6 +318,7 @@ Reason: Unsupported by available material
           async loadConfig() {
             return ok(createResolvedConfig());
           },
+          authClient: createManagedAuthClient("gpt-5.4"),
           async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return {
               ready: true,
@@ -443,6 +444,7 @@ Reason: Unsupported by available material
           async loadConfig() {
             return ok(createResolvedConfig());
           },
+          authClient: createManagedAuthClient("gpt-5.4"),
           async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return createReadyRuntimeStatus(homeDirectory);
           },
@@ -1277,6 +1279,7 @@ describe("prepareRunEnvironment", () => {
         async loadConfig() {
           return ok(createResolvedConfig());
         },
+        authClient: createManagedAuthClient("gpt-5.4"),
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return createReadyRuntimeStatus("/tmp/alice");
         },
