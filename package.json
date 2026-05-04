@@ -1,7 +1,7 @@
 {
-  "name": "uraniborg",
+  "name": "@perpetual-lm/uraniborg",
   "version": "0.1.0",
-  "description": "Local-first CLI for iterative review and refinement loops.",
+  "description": "A Local-first CLI for iterative peer-review and revision loops for research drafts.",
   "license": "MIT",
   "type": "module",
   "engines": {
