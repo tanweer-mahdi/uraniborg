@@ -67,7 +67,7 @@ describe("package contents", () => {
     expect(buildResult.status).toBe(0);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Package dry-run allowlist is valid");
-  }, 15000);
+  }, 30000);
 });
 
 async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {

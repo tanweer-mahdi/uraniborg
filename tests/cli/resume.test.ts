@@ -27,6 +27,7 @@ import {
   resolveIterationArtifactPaths,
   resolveRunArtifactPaths
 } from "../../src/run/artifact-store.js";
+import type { RevisionAuthClient } from "../../src/config/index.js";
 import type { FeynmanRuntimeStatus } from "../../src/review/index.js";
 import { ok } from "../../src/types/result.js";
 import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
@@ -157,6 +158,7 @@ Reason: Not available
         async loadConfig() {
           return ok(createResolvedConfig());
         },
+        authClient: createManagedAuthClient("gpt-5.4"),
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
@@ -419,6 +421,7 @@ Reason: Not available
           async loadConfig() {
             return ok(createResolvedConfig());
           },
+          authClient: createManagedAuthClient("gpt-5.4"),
           async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
             return {
               ready: true,
@@ -617,6 +620,7 @@ Reason: Not available
         async loadConfig() {
           return ok(createResolvedConfig());
         },
+        authClient: createManagedAuthClient("gpt-5.4"),
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
@@ -1418,6 +1422,7 @@ Reason: Not available
         async loadConfig() {
           return ok(createResolvedConfig());
         },
+        authClient: createManagedAuthClient("gpt-5.4"),
         async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
           return {
             ready: true,
@@ -1516,6 +1521,44 @@ function createResolvedConfig() {
     },
     model: "gpt-5.4"
   });
+}
+
+function createManagedAuthClient(modelId: string): RevisionAuthClient {
+  return {
+    async loginManagedCredential() {
+      throw new Error("Resume should not trigger browser login.");
+    },
+    async resolveManagedCredential() {
+      throw new Error("Resume should not resolve managed credential state directly.");
+    },
+    async resolveManagedModel(providerId: string, requestedModelId: string) {
+      return ok({
+        providerId,
+        model: {
+          id: requestedModelId,
+          name: requestedModelId,
+          provider: providerId,
+          api: "openai-codex-responses",
+          baseUrl: "https://chatgpt.com/backend-api",
+          input: ["text"] satisfies Array<"text" | "image">,
+          reasoning: true,
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0
+          },
+          contextWindow: 200000,
+          maxTokens: 32768
+        },
+        apiKey: "oauth-token",
+        accountId: "acct_123"
+      });
+    },
+    listAvailableModelIds() {
+      return [modelId];
+    }
+  };
 }
 
 async function writeResumeConfigSnapshot(
