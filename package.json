@@ -4,6 +4,21 @@
   "description": "A Local-first CLI for iterative peer-review and revision loops for research drafts.",
   "license": "MIT",
   "type": "module",
+  "keywords": [
+    "cli",
+    "research",
+    "review",
+    "revision",
+    "drafts"
+  ],
+  "homepage": "https://github.com/tanweer-mahdi/uraniborg#readme",
+  "bugs": {
+    "url": "https://github.com/tanweer-mahdi/uraniborg/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tanweer-mahdi/uraniborg.git"
+  },
   "engines": {
     "node": ">=20.0.0"
   },
@@ -15,6 +30,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "clean": "node scripts/clean.mjs",
@@ -22,6 +40,7 @@
     "pack:dry-run": "npm pack --dry-run",
     "package:check": "node scripts/validate-package.mjs",
     "prebuild": "npm run clean",
+    "release:ci": "npm run typecheck && npm run test && npm run build && npm run package:check && npm run pack:dry-run && npm run smoke:built && npm run smoke:installed",
     "release:check": "npm run typecheck && npm run test && npm run build && npm run package:check && npm run smoke:built && npm run smoke:installed && npm run smoke:doctor && npm run smoke:models",
     "smoke:built": "node dist/cli/main.js --help",
     "smoke:doctor": "node dist/cli/main.js --no-ui doctor",
