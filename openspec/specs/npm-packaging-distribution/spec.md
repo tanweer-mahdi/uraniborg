@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Define the npm packaging and distribution contract for Uraniborg as a CLI-only package with explicit prerequisites, a clean production build layout, and gated release validation.
+
+## Requirements
 
 ### Requirement: CLI-Only NPM Distribution
 The system SHALL distribute Uraniborg as an npm package whose supported interactive surface is the CLI and not a standalone application or daemon contract.
@@ -80,12 +84,20 @@ The system SHALL determine Feynman readiness by required capabilities and compat
 - **THEN** Uraniborg selects the compatible installation deterministically and reports which installation it will use
 
 ### Requirement: Manual Gated Release Matrix
-The system SHALL publish the npm package only after a manual release gate and SHALL validate that package against the supported platform matrix of macOS arm64/x64, Linux x64, and Windows x64.
+The system SHALL publish the npm package only after an explicit maintainer release trigger and a passing CI-enforced release gate, and SHALL validate that package against the supported platform matrix of macOS arm64/x64, Linux x64, and Windows x64 where the release environment can exercise those platforms.
 
-#### Scenario: Release requires manual approval
+#### Scenario: Release requires explicit maintainer intent
 - **WHEN** a release build is ready
-- **THEN** publication waits for a manual gate before the package is made available
+- **THEN** publication waits for an approved version tag or GitHub Release event before the package is made available
+
+#### Scenario: Release gate runs before publication
+- **WHEN** the release workflow receives an approved release trigger
+- **THEN** it runs typecheck, tests, production build, package allowlist validation, package dry-run, built-entrypoint smoke, installed-shim smoke, and configured non-interactive CLI smoke checks before invoking `npm publish`
 
 #### Scenario: Release matrix is limited
 - **WHEN** the release pipeline validates a release candidate
 - **THEN** it validates the npm package only against macOS arm64/x64, Linux x64, and Windows x64
+
+#### Scenario: External prerequisite smoke is explicit
+- **WHEN** a release smoke check depends on external Feynman capabilities
+- **THEN** the workflow either provisions the prerequisite explicitly or labels the check as a local/manual prerequisite smoke outside the automated publish gate
