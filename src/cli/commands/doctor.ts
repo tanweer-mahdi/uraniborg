@@ -228,7 +228,12 @@ function selectVisibleDoctorDetails(
   if (code === "runtime") {
     return details.filter(
       (detail) =>
-        detail.startsWith("Version:") || detail.startsWith("Multiple compatible")
+        detail.startsWith("Version:") ||
+        detail.startsWith("Multiple compatible") ||
+        detail.startsWith("Feynman version") ||
+        detail.startsWith("Install Feynman") ||
+        detail.startsWith("Candidate:") ||
+        detail.includes("probe failed")
     );
   }
 

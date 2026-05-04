@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Uraniborg Node and npm Packaging Deck</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-soft: #111934;
+      --panel: rgba(17, 25, 52, 0.88);
+      --panel-border: rgba(140, 165, 255, 0.18);
+      --text: #e6ecff;
+      --muted: #aab6df;
+      --accent: #86a8ff;
+      --accent-2: #8ef0d5;
+      --warn: #ffcb6b;
+      --danger: #ff8a9b;
+      --code-bg: rgba(4, 8, 18, 0.88);
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+      --radius: 22px;
+      --maxw: 1120px;
+      --slide-pad: clamp(22px, 4vw, 48px);
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at 10% 20%, rgba(134, 168, 255, 0.18), transparent 30%),
+        radial-gradient(circle at 90% 10%, rgba(142, 240, 213, 0.12), transparent 28%),
+        linear-gradient(160deg, #090d1a 0%, #0b1020 42%, #0e1530 100%);
+      color: var(--text);
+      font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 90%);
+      opacity: 0.6;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      padding: 20px;
+    }
+
+    .frame {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      background: rgba(4, 7, 17, 0.24);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .slides {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: var(--slide-pad);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 20px;
+      opacity: 0;
+      transform: translateX(8px);
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .slide-inner {
+      max-width: var(--maxw);
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      gap: 20px;
+      align-content: start;
+      min-height: 100%;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 34px;
+      height: 1px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+    }
+
+    h1,
+    h2,
+    h3,
+    p,
+    ul,
+    ol,
+    pre {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2.8rem, 7vw, 5.2rem);
+      line-height: 0.96;
+      letter-spacing: -0.05em;
+      max-width: 12ch;
+    }
+
+    h2 {
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+      max-width: 18ch;
+    }
+
+    h3 {
+      font-size: 1.06rem;
+      margin-bottom: 8px;
+      color: var(--accent-2);
+      letter-spacing: 0.02em;
+    }
+
+    .lede {
+      color: var(--muted);
+      font-size: 1.08rem;
+      max-width: 80ch;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 90ch;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius);
+      padding: 18px 18px 16px;
+      backdrop-filter: blur(14px);
+    }
+
+    .card strong {
+      color: var(--text);
+    }
+
+    .card p + p,
+    .card ul + p,
+    .card pre + p {
+      margin-top: 12px;
+    }
+
+    .card ul,
+    .card ol {
+      padding-left: 20px;
+      color: var(--text);
+    }
+
+    .card li + li {
+      margin-top: 6px;
+    }
+
+    pre {
+      overflow: auto;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--code-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #d9e2ff;
+      font: 13px/1.5 "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    code {
+      font: inherit;
+      color: #d6e2ff;
+    }
+
+    .highlight {
+      color: var(--accent-2);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    .danger {
+      color: var(--danger);
+    }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .progress {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 220px;
+    }
+
+    .bar {
+      position: relative;
+      flex: 1;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .bar > span {
+      position: absolute;
+      inset: 0;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 200ms ease;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .nav button {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .nav button:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.8em;
+      padding: 0.1em 0.45em;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.05);
+      font: 0.88em "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .file-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .file {
+      border-left: 3px solid rgba(134, 168, 255, 0.65);
+      padding-left: 12px;
+      color: var(--text);
+    }
+
+    .file small {
+      display: block;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .callout {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(134, 168, 255, 0.12), rgba(142, 240, 213, 0.08));
+      border: 1px solid rgba(134, 168, 255, 0.16);
+      color: var(--text);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 0.16em 0.55em;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 0.82rem;
+      letter-spacing: 0.01em;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        overflow: auto;
+      }
+
+      .deck,
+      .frame {
+        height: auto;
+      }
+
+      .slide {
+        position: relative;
+        inset: auto;
+        min-height: 100vh;
+      }
+
+      .grid-2,
+      .grid-3,
+      .split {
+        grid-template-columns: 1fr;
+      }
+
+      .footer {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck">
+    <div class="frame">
+      <div class="slides" id="slides">
+        <section class="slide active" data-title="Title">
+          <div class="slide-inner">
+            <div class="eyebrow">Uraniborg packaging deep dive</div>
+            <div>
+              <h1>Node and npm packaging in Uraniborg</h1>
+              <p class="lede" style="margin-top: 18px;">
+                A practical walkthrough of how this repo builds, emits, wires its bin,
+                and where the packaging traps are hiding.
+              </p>
+            </div>
+            <div class="grid-3">
+              <div class="card">
+                <h3>What this deck covers</h3>
+                <ul>
+                  <li>source tree and ownership boundaries</li>
+                  <li>package.json scripts and runtime deps</li>
+                  <li>tsconfig build concepts and tsc emit behavior</li>
+                  <li>bin wiring, dist layout, and release pitfalls</li>
+                </ul>
+              </div>
+              <div class="card">
+                <h3>Why it matters</h3>
+                <p>
+                  Uraniborg is close to distributable as a Node CLI, but the current
+                  repo still has a bin path mismatch and no release pipeline.
+                </p>
+              </div>
+              <div class="card">
+                <h3>Repo-specific warning</h3>
+                <p class="danger">
+                  This is not a single-file bundled app yet. Review-side execution still
+                  depends on a compatible <code>feynman</code> runtime being available on PATH.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Use <span class="kbd">←</span> <span class="kbd">→</span> or the buttons to move.</div>
+            <div class="progress"><span id="slideLabel">1 / 10</span><div class="bar"><span id="barFill"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="Source tree">
+          <div class="slide-inner">
+            <div class="eyebrow">1. Source tree</div>
+            <h2>Build scope starts with the current repo layout</h2>
+            <div class="split">
+              <div class="card">
+                <h3>Relevant directories</h3>
+                <pre>src/
+  cli/         command parsing, bootstrap, and command handlers
+  config/      path resolution, config parsing, auth binding
+  review/      Feynman runtime discovery and host-runtime checks
+  refine/      prompt assembly and managed refinement execution
+  run/         manifest and artifact writes
+  tui/         Ink app shell, screens, and navigation
+  memory/      information-highway state
+  loop/        deterministic run lifecycle orchestration
+tests/
+  ...         unit and integration coverage for the build graph
+notes/
+  ...         architecture, UAT, and packaging notes</pre>
+              </div>
+              <div class="card">
+                <h3>What is in the emit graph</h3>
+                <ul>
+                  <li><code>src/**/*.ts</code> and <code>src/**/*.tsx</code> are in scope</li>
+                  <li><code>tests/**/*.ts</code> and <code>tests/**/*.tsx</code> are also included today</li>
+                  <li><code>vitest.config.ts</code> is included in the TypeScript project</li>
+                  <li>plain docs, notes, and non-TS assets are not part of the emit pipeline</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Source of truth: <code>tsconfig.json</code> + <code>package.json</code></div>
+            <div class="progress"><span>2 / 10</span><div class="bar"><span style="width: 20%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="package.json">
+          <div class="slide-inner">
+            <div class="eyebrow">2. package.json</div>
+            <h2>The manifest defines scripts, entrypoint, and runtime surface</h2>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Current manifest shape</h3>
+                <pre>{
+  "name": "uraniborg",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20.0.0" },
+  "bin": { "uraniborg": "./dist/cli/main.js" },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "clean": "rm -rf dist coverage",
+    "dev": "tsx src/cli/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  }
+}</pre>
+              </div>
+              <div class="card">
+                <h3>What that means</h3>
+                <ul>
+                  <li><code>build</code> is compile-only, not bundle-only</li>
+                  <li><code>dev</code> runs source via <code>tsx</code></li>
+                  <li><code>private: true</code> blocks npm publication as-is</li>
+                  <li>the advertised bin must match the actual emitted path</li>
+                </ul>
+                <p class="warn" style="margin-top: 12px;">
+                  The README already calls out that the repo emits <code>dist/src/cli/main.js</code>
+                  while the bin currently points at <code>dist/cli/main.js</code>.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Core files: <code>package.json</code>, <code>README.md</code></div>
+            <div class="progress"><span>3 / 10</span><div class="bar"><span style="width: 30%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="tsconfig">
+          <div class="slide-inner">
+            <div class="eyebrow">3. tsconfig and tsconfig.build concepts</div>
+            <h2>Uraniborg uses one TypeScript config today, and it acts as the build config</h2>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Current compiler settings</h3>
+                <pre>{
+  "target": "ES2022",
+  "module": "NodeNext",
+  "moduleResolution": "NodeNext",
+  "rootDir": ".",
+  "outDir": "dist",
+  "strict": true,
+  "declaration": true,
+  "sourceMap": true,
+  "jsx": "react-jsx",
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "vitest.config.ts"
+  ]
+}</pre>
+              </div>
+              <div class="card">
+                <h3>How to think about it</h3>
+                <p>
+                  In larger repos, a split between <code>tsconfig.json</code> and
+                  <code>tsconfig.build.json</code> often separates developer ergonomics from
+                  distributable output.
+                </p>
+                <ul>
+                  <li><strong>base config</strong>: editor, tests, and shared language rules</li>
+                  <li><strong>build config</strong>: narrow emit set for shipped code only</li>
+                  <li><strong>benefit</strong>: tests and dev-only files do not leak into the release tree</li>
+                </ul>
+                <p>
+                  Uraniborg currently does not have that split, so the single config must be
+                  treated carefully during packaging.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Conceptual takeaway: build config should be narrower than editor config.</div>
+            <div class="progress"><span>4 / 10</span><div class="bar"><span style="width: 40%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="tsc emit">
+          <div class="slide-inner">
+            <div class="eyebrow">4. What tsc emits</div>
+            <h2>tsc mirrors the source tree into dist, plus declarations and maps</h2>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Emit behavior in this repo</h3>
+                <ul>
+                  <li><code>rootDir: "."</code> and <code>outDir: "dist"</code> preserve relative paths</li>
+                  <li><code>src/cli/main.ts</code> becomes <code>dist/src/cli/main.js</code></li>
+                  <li><code>.d.ts</code> and <code>.js.map</code> files are emitted too</li>
+                  <li>no bundling happens, so runtime dependencies remain external</li>
+                </ul>
+              </div>
+              <div class="card">
+                <h3>Why this matters</h3>
+                <p>
+                  The build output is a directory tree, not a packaged application.
+                  That means packaging has to decide:
+                </p>
+                <ul>
+                  <li>what to copy</li>
+                  <li>what to exclude</li>
+                  <li>how to make the bin point to the real entry file</li>
+                </ul>
+              </div>
+            </div>
+            <div class="callout">
+              Common trap: assuming <code>npm run build</code> produces a distributable executable.
+              It does not. It only produces JavaScript, type declarations, and source maps.
+            </div>
+          </div>
+          <div class="footer">
+            <div>Output directory: <code>dist/</code></div>
+            <div class="progress"><span>5 / 10</span><div class="bar"><span style="width: 50%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="Entrypoints">
+          <div class="slide-inner">
+            <div class="eyebrow">5. Entry points</div>
+            <h2>The CLI bootstrap is thin, but it controls the launch shape</h2>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Main bootstrap</h3>
+                <pre>src/cli/main.ts
+  - parses argv
+  - detects interactive TTY vs non-interactive mode
+  - launches Ink when appropriate
+  - otherwise dispatches to Commander
+
+src/cli/program.ts
+  - defines commands
+  - registers handlers
+  - prints the help/usage surface</pre>
+              </div>
+              <div class="card">
+                <h3>Runtime launch model</h3>
+                <ul>
+                  <li><code>uraniborg</code> in an interactive TTY opens the Ink dashboard</li>
+                  <li><code>--no-ui</code> bypasses Ink and keeps plain CLI execution</li>
+                  <li>stdin/stdout TTY state decides whether interactive UI is even attempted</li>
+                </ul>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Why packaging cares</h3>
+              <p>
+                The bin file is not just a launcher. It is the first step in deciding whether the
+                user gets a terminal app, a plain CLI command, or a compatibility path.
+              </p>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Runtime entry: <code>src/cli/main.ts</code></div>
+            <div class="progress"><span>6 / 10</span><div class="bar"><span style="width: 60%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="bin and dist">
+          <div class="slide-inner">
+            <div class="eyebrow">6. Bin wiring and dist layout</div>
+            <h2>The biggest current packaging pitfall is path drift</h2>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Current mismatch</h3>
+                <pre>package.json
+  "bin": {
+    "uraniborg": "./dist/cli/main.js"
+  }
+
+tsconfig.json emit
+  src/cli/main.ts -> dist/src/cli/main.js</pre>
+              </div>
+              <div class="card">
+                <h3>Consequence</h3>
+                <ul>
+                  <li><code>npm link</code> and packaged installs point to the wrong file</li>
+                  <li>README examples use the emitted path, not the advertised bin</li>
+                  <li>release artifacts need a deliberate alignment step</li>
+                </ul>
+                <p class="danger">
+                  If the path mismatch ships, the package looks installed but the command fails
+                  at startup.
+                </p>
+              </div>
+            </div>
+            <div class="card">
+              <h3>What a healthy release needs</h3>
+              <ul>
+                <li>bin path matches emitted file path exactly</li>
+                <li>build output is checked before publish</li>
+                <li>an installed-package smoke test resolves the actual entrypoint</li>
+              </ul>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Read the mismatch note in <code>README.md</code>.</div>
+            <div class="progress"><span>7 / 10</span><div class="bar"><span style="width: 70%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="Modules">
+          <div class="slide-inner">
+            <div class="eyebrow">7. Modules that participate in build and runtime</div>
+            <h2>Packaging is wider than the CLI entrypoint</h2>
+            <div class="grid-3">
+              <div class="card">
+                <h3>Runtime core</h3>
+                <p><code>src/loop/*</code>, <code>src/run/*</code>, <code>src/refine/*</code>, <code>src/review/*</code>, <code>src/config/*</code></p>
+              </div>
+              <div class="card">
+                <h3>Interactive shell</h3>
+                <p><code>src/tui/*</code> for Ink screens, route state, and keyboard navigation.</p>
+              </div>
+              <div class="card">
+                <h3>CLI surface</h3>
+                <p><code>src/cli/*</code> for commands, setup, readiness checks, and non-UI fallback.</p>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Runtime dependencies shipped with the package</h3>
+                <div>
+                  <span class="tag">ink</span>
+                  <span class="tag">react</span>
+                  <span class="tag">commander</span>
+                  <span class="tag">zod</span>
+                  <span class="tag">@clack/prompts</span>
+                  <span class="tag">@mariozechner/pi-ai</span>
+                  <span class="tag">@mariozechner/pi-coding-agent</span>
+                </div>
+              </div>
+              <div class="card">
+                <h3>Important packaging implication</h3>
+                <p>
+                  This repo is not self-contained just because it is compiled. The external
+                  Feynman/Pi runtime contract still exists, and the package must either provide
+                  it or document it clearly.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Build graph is source-tree wide, not just <code>src/cli</code>.</div>
+            <div class="progress"><span>8 / 10</span><div class="bar"><span style="width: 80%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="Pitfalls">
+          <div class="slide-inner">
+            <div class="eyebrow">8. Common packaging pitfalls in this repo</div>
+            <h2>What can go wrong when packaging this codebase</h2>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Repo-specific pitfalls</h3>
+                <ul>
+                  <li><strong>bin path mismatch</strong> between manifest and emit output</li>
+                  <li><strong>no release pipeline</strong> to validate installed-package behavior</li>
+                  <li><strong>tests in the emit graph</strong> because the build config includes them</li>
+                  <li><strong>no files allowlist</strong>, so a publish/archive strategy is undefined</li>
+                  <li><strong>external runtime dependency</strong> on a compatible <code>feynman</code></li>
+                </ul>
+              </div>
+              <div class="card">
+                <h3>Cross-platform concerns</h3>
+                <ul>
+                  <li>shell scripts and path assumptions in docs may be Unix-centric</li>
+                  <li>Windows needs correct entrypoint resolution and spawn behavior</li>
+                  <li>native packaging options change the maintenance surface sharply</li>
+                </ul>
+                <p class="warn">
+                  Cross-platform portability is easier at the Node layer than at the distribution layer.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="footer">
+            <div>Pitfall checklist should be part of release gates.</div>
+            <div class="progress"><span>9 / 10</span><div class="bar"><span style="width: 90%"></span></div></div>
+          </div>
+        </section>
+
+        <section class="slide" data-title="Release workflow">
+          <div class="slide-inner">
+            <div class="eyebrow">9. Recommended release workflow</div>
+            <h2>A sane packaging flow for Uraniborg</h2>
+            <div class="grid-2">
+              <div class="card">
+                <h3>Minimum release sequence</h3>
+                <ol>
+                  <li>build with <code>npm run build</code></li>
+                  <li>run <code>npm run test</code> and <code>npm run typecheck</code></li>
+                  <li>verify the emitted entrypoint path</li>
+                  <li>smoke-test the installed bin on macOS, Linux, and Windows</li>
+                  <li>confirm the runtime contract for Feynman/Pi is documented</li>
+                </ol>
+              </div>
+              <div class="card">
+                <h3>Decision points to settle before shipping</h3>
+                <ul>
+                  <li>npm package vs archive bundle vs single executable</li>
+                  <li>whether Feynman/Pi is a bundled dependency or a host prerequisite</li>
+                  <li>whether tests are excluded from shipped artifacts</li>
+                </ul>
+              </div>
+            </div>
+            <div class="callout">
+              The repo is closest to a cross-platform Node distribution, but it is not yet
+              a fully self-contained standalone runtime bundle.
+            </div>
+          </div>
+          <div class="footer">
+            <div>For release, keep the build artifact and bin path in lockstep.</div>
+            <div class="progress"><span>10 / 10</span><div class="bar"><span style="width: 100%"></span></div></div>
+          </div>
+        </section>
+      </div>
+
+      <div style="position:absolute; right: 20px; top: 20px; z-index: 3;" class="nav">
+        <button id="prevBtn" type="button">Prev</button>
+        <button id="nextBtn" type="button">Next</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const slides = Array.from(document.querySelectorAll(".slide"));
+      const slideLabel = document.getElementById("slideLabel");
+      const barFill = document.getElementById("barFill");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      let index = 0;
+
+      const max = Math.max(slides.length - 1, 1);
+
+      function render() {
+        slides.forEach((slide, slideIndex) => {
+          slide.classList.toggle("active", slideIndex === index);
+        });
+
+        const activeTitle = slides[index]?.dataset.title ?? "";
+        document.title = activeTitle
+          ? `Uraniborg Node and npm Packaging Deck - ${activeTitle}`
+          : "Uraniborg Node and npm Packaging Deck";
+
+        if (slideLabel) {
+          slideLabel.textContent = `${index + 1} / ${slides.length}`;
+        }
+
+        if (barFill) {
+          barFill.style.width = `${(index / max) * 100}%`;
+        }
+      }
+
+      function move(delta) {
+        index = Math.min(Math.max(index + delta, 0), slides.length - 1);
+        render();
+      }
+
+      prevBtn?.addEventListener("click", () => move(-1));
+      nextBtn?.addEventListener("click", () => move(1));
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft" || event.key === "PageUp") {
+          event.preventDefault();
+          move(-1);
+        }
+
+        if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+          event.preventDefault();
+          move(1);
+        }
+
+        if (event.key === "Home") {
+          event.preventDefault();
+          index = 0;
+          render();
+        }
+
+        if (event.key === "End") {
+          event.preventDefault();
+          index = slides.length - 1;
+          render();
+        }
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

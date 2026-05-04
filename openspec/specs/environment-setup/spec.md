@@ -12,26 +12,42 @@ The system SHALL prepare and validate a Uraniborg app home rooted at `~/.uranibo
 - **THEN** the system validates the required layout and reuses it without deleting prior runs
 
 ### Requirement: Pinned Feynman Runtime Provisioning
-The system SHALL provision and invoke a pinned standalone Feynman runtime under `~/.uraniborg/vendor/feynman` and SHALL use that runtime for review-side commands instead of depending on a `PATH`-resolved global installation.
+The system SHALL require a compatible external Feynman installation and SHALL use that installation for review-side commands instead of provisioning a Uraniborg-managed standalone runtime under `~/.uraniborg/vendor/feynman`.
 
-#### Scenario: First-time runtime provisioning
-- **WHEN** a user runs a Uraniborg command and the pinned Feynman runtime is not yet present under `~/.uraniborg/vendor/feynman`
-- **THEN** the system installs or prepares the pinned Feynman runtime before continuing with review-side operations
+#### Scenario: Missing external prerequisite
+- **WHEN** a user runs a Uraniborg command on a machine without a compatible Feynman installation
+- **THEN** the system reports the missing prerequisite and explains how the user can install or expose Feynman
 
-#### Scenario: Global version conflict
-- **WHEN** a different `feynman` installation is also available on `PATH` with a version that differs from Uraniborg's pinned version
-- **THEN** the system warns the user about the version conflict and continues using the pinned runtime
+#### Scenario: Compatible external installation available
+- **WHEN** a user runs a Uraniborg command and a compatible external Feynman installation is available
+- **THEN** the system uses that installation for review-side operations instead of attempting to provision a bundled runtime
+
+#### Scenario: Incompatible installation is rejected
+- **WHEN** Uraniborg finds a Feynman installation that fails the required capability checks
+- **THEN** the system reports the compatibility failure against that installation and does not treat it as ready
+
+#### Scenario: Out-of-range but probe-valid installation is not rejected
+- **WHEN** Uraniborg finds a Feynman installation outside the tested version range and the required compatibility probes succeed
+- **THEN** the system reports a warning about the untested version and still treats the installation as compatible enough to proceed
 
 ### Requirement: Environment Health Checks
-The system SHALL provide a `doctor` command that validates embedded Feynman availability, review-side readiness, Uraniborg-owned revision configuration validity, revision runtime executability for the active profile, and filesystem readiness.
+The system SHALL provide a `doctor` command that validates embedded review-side readiness, external Feynman compatibility, Uraniborg-owned revision configuration validity, revision runtime executability for the active profile, and filesystem readiness.
 
 #### Scenario: Fully healthy environment
 - **WHEN** the user runs `uraniborg doctor` and all dependencies are ready
-- **THEN** the command reports success for app-home layout, embedded review runtime, review-side readiness, and executable revision runtime state for the active profile
+- **THEN** the command reports success for app-home layout, review-side readiness, external Feynman compatibility, and executable revision runtime state for the active profile
 
-#### Scenario: Pinned runtime not runnable
-- **WHEN** the user runs `uraniborg doctor` and the pinned Feynman binary fails the version or runnability check
-- **THEN** the command reports the review-runtime failure against the pinned runtime rather than silently falling back to another binary on `PATH`
+#### Scenario: External Feynman prerequisite missing
+- **WHEN** the user runs `uraniborg doctor` and no compatible Feynman installation can be discovered
+- **THEN** the command reports the missing prerequisite and explains how the user can install or expose a compatible Feynman runtime
+
+#### Scenario: External Feynman compatibility failure
+- **WHEN** the user runs `uraniborg doctor` and a discovered Feynman installation fails the required capability checks
+- **THEN** the command reports the compatibility failure against that installation rather than pretending a bundled runtime is available
+
+#### Scenario: Compatible runtime with incomplete readiness remains distinguishable
+- **WHEN** the user runs `uraniborg doctor` and the discovered Feynman installation is compatibility-valid but review models, AlphaXiv, or web-search readiness is incomplete
+- **THEN** the command reports the compatibility status separately from those readiness issues instead of misclassifying the installation as incompatible
 
 #### Scenario: Missing revision configuration
 - **WHEN** the user runs `uraniborg doctor` without a valid Uraniborg revision configuration

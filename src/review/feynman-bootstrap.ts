@@ -33,7 +33,8 @@ export type FeynmanRuntimeStatusCode =
 
 export type FeynmanRuntimeCandidateFailureCode =
   | "version_command_failed"
-  | "version_unreadable";
+  | "version_unreadable"
+  | "compatibility_probe_failed";
 
 export interface FeynmanRuntimeCandidate {
   executablePath: string;
@@ -50,6 +51,7 @@ export interface FeynmanRuntimeStatus {
   detectedVersion?: string | undefined;
   warnings: readonly string[];
   candidates: readonly FeynmanRuntimeCandidate[];
+  compatibility?: import("./feynman-compatibility.js").FeynmanCompatibilityReport | undefined;
 }
 
 export function createNodeFeynmanRuntimeFilesystem(): FeynmanRuntimeFilesystem {

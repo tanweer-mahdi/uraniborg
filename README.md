@@ -19,7 +19,7 @@ The v1 implementation is complete against the locked OpenSpec change and the can
 - [openspec/specs/iterative-draft-run/spec.md](openspec/specs/iterative-draft-run/spec.md)
 - [openspec/specs/run-recovery-and-history/spec.md](openspec/specs/run-recovery-and-history/spec.md)
 
-Automated validation is in place, but live UAT against a real embedded Feynman runtime and real provider credentials is still required.
+Automated validation is in place, but live UAT against a real external Feynman runtime and real provider credentials is still required.
 
 ## What The CLI Supports
 
@@ -57,8 +57,26 @@ The current CLI surface is:
 
 - Node.js `>= 20`
 - npm
-- a real pinned Feynman runtime available under `~/.uraniborg/vendor/feynman`
+- a compatible external Feynman installation available as `feynman` on `PATH`
 - credentials for the Uraniborg-owned refine endpoint you configure during `init`
+
+Uraniborg does not bundle, provision, or own Feynman. Install or expose Feynman separately before running review-dependent commands.
+
+## Install
+
+Install the CLI from npm:
+
+```bash
+npm install -g uraniborg
+```
+
+Then check the local environment:
+
+```bash
+uraniborg doctor
+```
+
+If Feynman is missing or incompatible, `uraniborg doctor`, `uraniborg models`, and run preflight report prerequisite guidance. Review-model, AlphaXiv, and web-search setup problems remain Feynman readiness issues; they are reported separately from Feynman compatibility.
 
 ## Local Development
 
@@ -83,12 +101,56 @@ npm run build
 Run the built CLI locally:
 
 ```bash
-node dist/src/cli/main.js --help
+node dist/cli/main.js --help
 ```
 
 ## Quickstart
 
-1. Build the CLI:
+1. Install the CLI:
+
+```bash
+npm install -g uraniborg
+```
+
+2. Check prerequisites:
+
+```bash
+uraniborg doctor
+```
+
+3. Configure refinement:
+
+```bash
+uraniborg init
+```
+
+4. Check model availability:
+
+```bash
+uraniborg models
+```
+
+5. Run a draft:
+
+```bash
+uraniborg run path/to/draft.md --iterations 1
+```
+
+6. Inspect prior runs:
+
+```bash
+uraniborg history
+```
+
+7. Resume an interrupted run:
+
+```bash
+uraniborg resume <run-id>
+```
+
+## Source Checkout Quickstart
+
+1. Build the CLI from source:
 
 ```bash
 npm run build
@@ -97,32 +159,32 @@ npm run build
 2. Configure refinement:
 
 ```bash
-node dist/src/cli/main.js init
+node dist/cli/main.js init
 ```
 
 3. Check readiness:
 
 ```bash
-node dist/src/cli/main.js doctor
-node dist/src/cli/main.js models
+node dist/cli/main.js doctor
+node dist/cli/main.js models
 ```
 
 4. Run a draft:
 
 ```bash
-node dist/src/cli/main.js run path/to/draft.md --iterations 1
+node dist/cli/main.js run path/to/draft.md --iterations 1
 ```
 
 5. Inspect prior runs:
 
 ```bash
-node dist/src/cli/main.js history
+node dist/cli/main.js history
 ```
 
 6. Resume an interrupted run:
 
 ```bash
-node dist/src/cli/main.js resume <run-id>
+node dist/cli/main.js resume <run-id>
 ```
 
 ## Run Artifacts
@@ -150,14 +212,6 @@ For structured acceptance testing:
 - read the plan: [notes/uraniborg-v1-uat-plan.md](notes/uraniborg-v1-uat-plan.md)
 - follow the execution guide: [notes/uraniborg-v1-uat-instructions.md](notes/uraniborg-v1-uat-instructions.md)
 
-## Known Packaging Gap
+## Packaging
 
-The current build emits the CLI entrypoint at `dist/src/cli/main.js`.
-
-`package.json` currently advertises the bin as `./dist/cli/main.js`, which does not match the emitted path. For local use, run the built file directly with:
-
-```bash
-node dist/src/cli/main.js ...
-```
-
-This is a packaging/product issue to fix in the codebase, not just a one-off UAT workaround.
+Production builds emit the CLI entrypoint at `dist/cli/main.js`, matching the npm `bin` contract. The npm package is allowlist-based and ships only `dist/**`, `package.json`, `README.md`, and `LICENSE`.

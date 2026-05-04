@@ -208,7 +208,7 @@ export async function executeReviewAndNormalize(
       code: "review_process_failed",
       message:
         providerMessage ??
-        `Pinned Feynman review exited with code ${execution.exitCode} during iteration ${input.iterationNumber}.`,
+        `Feynman review exited with code ${execution.exitCode} during iteration ${input.iterationNumber}.`,
       details: execution.stderr.trim().length > 0 ? [execution.stderr.trim()] : undefined,
       exitCode: execution.exitCode
     });
@@ -333,7 +333,7 @@ export async function discoverNewReviewArtifact(
       createReviewFailure({
         code: "review_artifact_missing",
         message:
-          "Pinned Feynman review completed without producing a new outputs/*-review.md artifact."
+          "Feynman review completed without producing a new outputs/*-review.md artifact."
       })
     );
   }
@@ -343,7 +343,7 @@ export async function discoverNewReviewArtifact(
       createReviewFailure({
         code: "review_artifact_ambiguous",
         message:
-          "Pinned Feynman review produced multiple new outputs/*-review.md artifacts, so attribution is ambiguous.",
+          "Feynman review produced multiple new outputs/*-review.md artifacts, so attribution is ambiguous.",
         details: newReviewArtifacts
       })
     );
@@ -356,7 +356,7 @@ export async function discoverNewReviewArtifact(
       createReviewFailure({
         code: "review_artifact_missing",
         message:
-          "Pinned Feynman review completed without producing a uniquely attributable review artifact."
+          "Feynman review completed without producing a uniquely attributable review artifact."
       })
     );
   }
@@ -376,7 +376,7 @@ export async function normalizeReviewArtifact(input: {
     return err(
       createReviewFailure({
         code: "review_artifact_unusable",
-        message: `Pinned Feynman review artifact "${input.externalReviewFile}" was empty or whitespace-only.`
+        message: `Feynman review artifact "${input.externalReviewFile}" was empty or whitespace-only.`
       })
     );
   }

@@ -162,6 +162,9 @@ export function renderModelsReport(report: ModelsReport): readonly string[] {
     lines.push(
       `[ok] Using ${report.runtimeStatus.executablePath}${typeof report.runtimeStatus.detectedVersion === "string" ? ` (version ${report.runtimeStatus.detectedVersion})` : ""}.`
     );
+    for (const warning of report.runtimeStatus.warnings) {
+      lines.push(`[warn] ${warning}`);
+    }
     lines.push(
       `[ok] ${report.readinessReport.reviewModels.length} review model${report.readinessReport.reviewModels.length === 1 ? "" : "s"} available through the selected Feynman runtime.`
     );
