@@ -1,32 +1,33 @@
-import React, { useMemo, useState } from "react";
-import { Box, Text, useInput } from "ink";
+import React, { useEffect, useState } from "react";
+import { Box, Text, useInput, useStdout } from "ink";
 
 import {
   collectHistoryEntries,
   type HistoryEntry
 } from "../../cli/commands/history.js";
-import { FooterHelp, MenuList, Section } from "../components.js";
+import { FooterHelp, Section } from "../components.js";
 import { useReloadableAsyncValue } from "../hooks.js";
+import { HistoryTable } from "../history-table.js";
 
 export function HistoryScreen(props: {
   onOpenRun: (runId: string) => void;
   loadEntries?: () => Promise<readonly HistoryEntry[]>;
+  terminalWidth?: number;
 }): React.JSX.Element {
   const [selection, setSelection] = useState(0);
+  const detectedTerminalWidth = useTerminalWidth();
+  const terminalWidth = props.terminalWidth ?? detectedTerminalWidth;
   const historyState = useReloadableAsyncValue(
     async () => props.loadEntries?.() ?? collectHistoryEntries({}),
     []
   );
+  const entries = historyState.value ?? [];
 
-  const items = useMemo(
-    () =>
-      (historyState.value ?? []).map((entry) => ({
-        id: entry.runId,
-        label: `${entry.runId} | ${entry.status}`,
-        hint: `${entry.createdAt} | ${entry.progress} | ${entry.title}`
-      })),
-    [historyState.value]
-  );
+  useEffect(() => {
+    if (selection >= entries.length && entries.length > 0) {
+      setSelection(entries.length - 1);
+    }
+  }, [entries.length, selection]);
 
   useInput((_input, key) => {
     if (key.upArrow && selection > 0) {
@@ -34,16 +35,16 @@ export function HistoryScreen(props: {
       return;
     }
 
-    if (key.downArrow && selection < items.length - 1) {
+    if (key.downArrow && selection < entries.length - 1) {
       setSelection((current) => current + 1);
       return;
     }
 
     if (key.return) {
-      const selectedItem = items[selection];
+      const selectedEntry = entries[selection];
 
-      if (selectedItem !== undefined) {
-        props.onOpenRun(selectedItem.id);
+      if (selectedEntry !== undefined) {
+        props.onOpenRun(selectedEntry.runId);
       }
     }
   });
@@ -56,7 +57,7 @@ export function HistoryScreen(props: {
     return <Text color="red">{historyState.error}</Text>;
   }
 
-  if ((historyState.value ?? []).length === 0) {
+  if (entries.length === 0) {
     return (
       <Box flexDirection="column">
         <Text>No Uraniborg runs are available.</Text>
@@ -65,14 +66,38 @@ export function HistoryScreen(props: {
     );
   }
 
-  const selectedId = items[selection]?.id ?? items[0]?.id ?? "none";
+  const selectedId = entries[selection]?.runId ?? entries[0]?.runId ?? "none";
 
   return (
     <Box flexDirection="column">
       <Section title="Run History">
-        <MenuList items={items} selectedId={selectedId} />
+        <HistoryTable
+          entries={entries}
+          selectedId={selectedId}
+          terminalWidth={terminalWidth}
+        />
       </Section>
       <FooterHelp text="↑/↓ choose run • Enter open detail" />
     </Box>
   );
+}
+
+function useTerminalWidth(): number {
+  const { stdout } = useStdout();
+  const [width, setWidth] = useState<number>(stdout.columns ?? 80);
+
+  useEffect(() => {
+    const refreshWidth = (): void => {
+      setWidth(stdout.columns ?? 80);
+    };
+
+    refreshWidth();
+    stdout.on("resize", refreshWidth);
+
+    return () => {
+      stdout.off("resize", refreshWidth);
+    };
+  }, [stdout]);
+
+  return width;
 }

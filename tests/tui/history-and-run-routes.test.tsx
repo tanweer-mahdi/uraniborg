@@ -2,6 +2,7 @@ import React from "react";
 import { render } from "ink-testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { HistoryEntry } from "../../src/cli/commands/history.js";
 import { HistoryScreen } from "../../src/tui/screens/history.js";
 import {
   RunDetailScreen,
@@ -26,6 +27,77 @@ describe("history and run routes", () => {
     await flushInk();
 
     expect(app.lastFrame()).toContain("No Uraniborg runs are available.");
+
+    app.unmount();
+  });
+
+  it("renders structured wide history rows without pipe-delimited labels", async () => {
+    const app = render(
+      <HistoryScreen
+        onOpenRun={() => {}}
+        loadEntries={async () => createHistoryEntries()}
+        terminalWidth={120}
+      />
+    );
+    await flushInk();
+
+    const frame = app.lastFrame() ?? "";
+
+    expect(frame).toContain("Status");
+    expect(frame).toContain("Prog");
+    expect(frame).toContain("Created");
+    expect(frame).toContain("Title");
+    expect(frame).toContain("Run ID");
+    expect(frame).toContain("finished");
+    expect(frame).toContain("1/1");
+    expect(frame).toContain("First Draft Review");
+    expect(frame).toContain("run-1");
+    expect(frame).not.toContain("run-1 | finished");
+
+    app.unmount();
+  });
+
+  it("renders compact readable history rows in narrow terminals", async () => {
+    const app = render(
+      <HistoryScreen
+        onOpenRun={() => {}}
+        loadEntries={async () => createHistoryEntries()}
+        terminalWidth={48}
+      />
+    );
+    await flushInk();
+
+    const frame = app.lastFrame() ?? "";
+
+    expect(frame).toContain("First Draft Review");
+    expect(frame).toContain("finished 1/1");
+    expect(frame).toContain("2026-05-01T00:00:00.000Z run-1");
+    expect(frame).toContain("Failed Revision");
+    expect(frame).toContain("failed 1/2");
+    expect(frame).not.toContain("Status");
+    expect(frame).not.toContain("run-1 | finished");
+
+    app.unmount();
+  });
+
+  it("opens the selected history run after keyboard navigation", async () => {
+    const onOpenRun = vi.fn();
+    const app = render(
+      <HistoryScreen
+        onOpenRun={onOpenRun}
+        loadEntries={async () => createHistoryEntries()}
+        terminalWidth={120}
+      />
+    );
+    await flushInk();
+
+    app.stdin.write("\u001B[B");
+    await flushInk();
+    app.stdin.write("\r");
+    await flushInk();
+
+    expect(onOpenRun).toHaveBeenCalledTimes(1);
+    expect(onOpenRun).toHaveBeenCalledWith("run-2");
 
     app.unmount();
   });
@@ -195,6 +267,25 @@ function createRunDetail(): RunDetailViewModel {
       }
     ]
   };
+}
+
+function createHistoryEntries(): readonly HistoryEntry[] {
+  return [
+    {
+      runId: "run-1",
+      createdAt: "2026-05-01T00:00:00.000Z",
+      status: "finished",
+      progress: "1/1",
+      title: "First Draft Review"
+    },
+    {
+      runId: "run-2",
+      createdAt: "2026-05-02T00:00:00.000Z",
+      status: "failed",
+      progress: "1/2",
+      title: "Failed Revision"
+    }
+  ];
 }
 
 function createRunSetupSnapshot(): RunSetupSnapshot {
