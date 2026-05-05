@@ -10,6 +10,144 @@ import type { UraniborgAppHomeStatus } from "../../src/config/index.js";
 import { createResolvedTestUraniborgConfig } from "../helpers/uraniborg-config.js";
 
 describe("runDoctorCommand", () => {
+  it("shows the exact Feynman install command when no runtime is found on PATH", async () => {
+    const lines: string[] = [];
+
+    await runDoctorCommand({
+      interactive: false,
+      resolvePaths() {
+        return {
+          homeDirectory: "/tmp/alice",
+          appHomeDirectory: "/tmp/alice/.uraniborg",
+          configFile: "/tmp/alice/.uraniborg/config.json",
+          vendorDirectory: "/tmp/alice/.uraniborg/vendor",
+          feynmanRuntimeDirectory: "/tmp/alice/.uraniborg/vendor/feynman",
+          feynmanRuntimeManifestFile:
+            "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
+          runsDirectory: "/tmp/alice/.uraniborg/runs"
+        };
+      },
+      async ensureAppHome() {
+        return createAppHomeStatus();
+      },
+      async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
+        return {
+          ready: false,
+          code: "runtime_missing",
+          warnings: [],
+          candidates: []
+        };
+      },
+      async listModels() {
+        throw new Error("Model discovery should not run without a runtime.");
+      },
+      async getAlphaStatus() {
+        throw new Error("AlphaXiv status should not run without a runtime.");
+      },
+      async getSearchStatus() {
+        throw new Error("Web-search status should not run without a runtime.");
+      },
+      async loadConfig() {
+        return ok(
+          createResolvedTestUraniborgConfig({
+            profileId: "openai-codex-chatgpt",
+            binding: {
+              type: "pi-auth-storage",
+              providerId: "openai-codex"
+            },
+            model: "gpt-5",
+            providerContext: {
+              accountId: "acct_123"
+            }
+          })
+        );
+      },
+      writeLine(message) {
+        lines.push(message);
+      }
+    });
+
+    expect(lines).toContain(
+      "[fail] No compatible Feynman runtime was found on PATH. [required]"
+    );
+    expect(lines).toContain(
+      "  Install Feynman with `npm install -g @companion-ai/feynman@latest`, then ensure a compatible `feynman` executable is available on PATH before running Uraniborg."
+    );
+  });
+
+  it("reports incompatible discovered runtimes without classifying them as missing from PATH", async () => {
+    const lines: string[] = [];
+
+    await runDoctorCommand({
+      interactive: false,
+      resolvePaths() {
+        return {
+          homeDirectory: "/tmp/alice",
+          appHomeDirectory: "/tmp/alice/.uraniborg",
+          configFile: "/tmp/alice/.uraniborg/config.json",
+          vendorDirectory: "/tmp/alice/.uraniborg/vendor",
+          feynmanRuntimeDirectory: "/tmp/alice/.uraniborg/vendor/feynman",
+          feynmanRuntimeManifestFile:
+            "/tmp/alice/.uraniborg/vendor/feynman/runtime.json",
+          runsDirectory: "/tmp/alice/.uraniborg/runs"
+        };
+      },
+      async ensureAppHome() {
+        return createAppHomeStatus();
+      },
+      async inspectRuntime(): Promise<FeynmanRuntimeStatus> {
+        return {
+          ready: false,
+          code: "runtime_incompatible",
+          warnings: [],
+          candidates: [
+            {
+              executablePath: "/tmp/feynman",
+              compatible: false,
+              failureCode: "version_unreadable",
+              details: ["stdout: not-a-version"]
+            }
+          ]
+        };
+      },
+      async listModels() {
+        throw new Error("Model discovery should not run for incompatible runtime.");
+      },
+      async getAlphaStatus() {
+        throw new Error("AlphaXiv status should not run for incompatible runtime.");
+      },
+      async getSearchStatus() {
+        throw new Error("Web-search status should not run for incompatible runtime.");
+      },
+      async loadConfig() {
+        return ok(
+          createResolvedTestUraniborgConfig({
+            profileId: "openai-codex-chatgpt",
+            binding: {
+              type: "pi-auth-storage",
+              providerId: "openai-codex"
+            },
+            model: "gpt-5",
+            providerContext: {
+              accountId: "acct_123"
+            }
+          })
+        );
+      },
+      writeLine(message) {
+        lines.push(message);
+      }
+    });
+
+    expect(lines).toContain(
+      "[fail] Discovered Feynman runtimes are incompatible with Uraniborg. [required]"
+    );
+    expect(lines).toContain("  Candidate: /tmp/feynman");
+    expect(lines).not.toContain(
+      "[fail] No compatible Feynman runtime was found on PATH. [required]"
+    );
+  });
+
   it("reports recommended capability gaps and surfaces feynman doctor diagnostics", async () => {
     const lines: string[] = [];
 

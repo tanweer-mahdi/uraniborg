@@ -34,6 +34,9 @@ export interface FeynmanInteractiveLauncher {
   ) => Promise<{ exitCode: number }>;
 }
 
+export const FEYNMAN_NPM_INSTALL_COMMAND =
+  "npm install -g @companion-ai/feynman@latest";
+
 export function createRuntimeInstallRemediationAction(
   reason: string
 ): FeynmanRemediationAction {

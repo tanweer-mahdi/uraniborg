@@ -8,6 +8,7 @@ import {
   createModelLoginRemediationAction,
   createSearchConfigurationRemediationAction,
   createSetupRemediationAction,
+  FEYNMAN_NPM_INSTALL_COMMAND,
   type FeynmanRemediationAction
 } from "./feynman-remediation.js";
 
@@ -140,7 +141,7 @@ export function createRuntimeReadinessCheck(
       ready: false,
       summary: "No compatible Feynman runtime was found on PATH.",
       details: [
-        "Install Feynman and ensure a compatible `feynman` executable is available on PATH before running Uraniborg."
+        `Install Feynman with \`${FEYNMAN_NPM_INSTALL_COMMAND}\`, then ensure a compatible \`feynman\` executable is available on PATH before running Uraniborg.`
       ]
     };
   }

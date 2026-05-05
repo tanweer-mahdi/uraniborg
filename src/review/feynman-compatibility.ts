@@ -7,6 +7,7 @@ import {
   getFeynmanSearchStatus,
   listFeynmanModels
 } from "./feynman-models.js";
+import { FEYNMAN_NPM_INSTALL_COMMAND } from "./feynman-remediation.js";
 import type { FeynmanCommandRunner } from "./feynman-bootstrap.js";
 
 export const TESTED_FEYNMAN_VERSION_RANGE = ">=0.2.0 <2.0.0";
@@ -187,7 +188,7 @@ function createRuntimeUnavailableCompatibilityReport(
       summary: "No compatible Feynman runtime was found on PATH.",
       warnings: [],
       details: [
-        "Install Feynman and ensure a compatible `feynman` executable is available on PATH."
+        `Install Feynman with \`${FEYNMAN_NPM_INSTALL_COMMAND}\`, then ensure a compatible \`feynman\` executable is available on PATH.`
       ],
       probes: []
     };

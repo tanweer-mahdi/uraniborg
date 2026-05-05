@@ -107,7 +107,12 @@ describe("classifyFeynmanReadiness", () => {
       expect.objectContaining({
         code: "runtime",
         tier: "required",
-        ready: false
+        ready: false,
+        details: expect.arrayContaining([
+          expect.stringContaining(
+            "npm install -g @companion-ai/feynman@latest"
+          )
+        ])
       })
     ]);
   });

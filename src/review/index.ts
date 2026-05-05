@@ -39,6 +39,7 @@ export {
   createSearchConfigurationRemediationAction,
   createSetupRemediationAction,
   describeFeynmanRemediationAction,
+  FEYNMAN_NPM_INSTALL_COMMAND,
   getFeynmanRemediationCommand,
   launchFeynmanRemediationAction,
   runCapturedFeynmanRemediationAction,
