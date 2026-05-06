@@ -21,6 +21,10 @@ describe("npm package metadata", () => {
 
     expect(dependencies["@types/react"]).toBeUndefined();
     expect(dependencies["ink-testing-library"]).toBeUndefined();
+    expect(dependencies["markdown-it"]).toBeDefined();
+    expect(dependencies["sanitize-html"]).toBeDefined();
+    expect(devDependencies["@types/markdown-it"]).toBeDefined();
+    expect(devDependencies["@types/sanitize-html"]).toBeDefined();
     expect(devDependencies["@types/react"]).toBe("^19.2.14");
     expect(devDependencies["ink-testing-library"]).toBe("^4.0.0");
   });

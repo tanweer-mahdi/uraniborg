@@ -65,6 +65,11 @@ if (!filePaths.includes("dist/cli/main.js")) {
   process.exit(1);
 }
 
+if (!filePaths.includes("dist/history-viewer/snapshot.js")) {
+  console.error("Package tarball does not include dist/history-viewer/snapshot.js.");
+  process.exit(1);
+}
+
 console.log(
   `Package dry-run allowlist is valid with ${filePaths.length} packed files.`
 );
