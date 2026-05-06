@@ -2,9 +2,12 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { runHistoryCommand } from "../../src/cli/commands/history.js";
+import {
+  runHistoryCommand,
+  runHistoryWebCommand
+} from "../../src/cli/commands/history.js";
 import { createRunManifest, writeRunManifest } from "../../src/run/manifest.js";
 import { resolveRunArtifactPaths } from "../../src/run/artifact-store.js";
 
@@ -159,5 +162,56 @@ describe("runHistoryCommand", () => {
     expect(output[0]).toContain("finished");
     expect(output[1]).toContain("run-older");
     expect(output[1]).toContain("failed");
+  });
+
+  it("opens a selected run snapshot from the history web command", async () => {
+    const output: string[] = [];
+    const openRunSnapshot = vi.fn().mockResolvedValue({
+      runId: "run-newer",
+      snapshotFile: "/tmp/run-newer.html",
+      snapshotUrl: "file:///tmp/run-newer.html",
+      browser: {
+        opened: true
+      }
+    });
+
+    await runHistoryWebCommand("run-newer", {
+      openRunSnapshot,
+      writeLine(message) {
+        output.push(message);
+      }
+    });
+
+    expect(openRunSnapshot).toHaveBeenCalledWith("run-newer", {});
+    expect(output).toEqual([
+      "Generated run snapshot: /tmp/run-newer.html",
+      "Opened run snapshot: file:///tmp/run-newer.html"
+    ]);
+  });
+
+  it("reports manual opening instructions when browser launch fails", async () => {
+    const output: string[] = [];
+    const openRunSnapshot = vi.fn().mockResolvedValue({
+      runId: "run-newer",
+      snapshotFile: "/tmp/run-newer.html",
+      snapshotUrl: "file:///tmp/run-newer.html",
+      browser: {
+        opened: false,
+        message: "no browser"
+      }
+    });
+
+    await runHistoryWebCommand("run-newer", {
+      openRunSnapshot,
+      writeLine(message) {
+        output.push(message);
+      }
+    });
+
+    expect(output).toEqual([
+      "Generated run snapshot: /tmp/run-newer.html",
+      "Open manually: file:///tmp/run-newer.html",
+      "Browser launch failed: no browser"
+    ]);
   });
 });

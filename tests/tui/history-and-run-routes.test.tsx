@@ -3,6 +3,7 @@ import { render } from "ink-testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HistoryEntry } from "../../src/cli/commands/history.js";
+import type { OpenRunSnapshotResult } from "../../src/history-viewer/index.js";
 import { HistoryScreen } from "../../src/tui/screens/history.js";
 import {
   RunDetailScreen,
@@ -22,7 +23,7 @@ describe("history and run routes", () => {
 
   it("renders the empty history state", async () => {
     const app = render(
-      <HistoryScreen onOpenRun={() => {}} loadEntries={async () => []} />
+      <HistoryScreen loadEntries={async () => []} />
     );
     await flushInk();
 
@@ -34,7 +35,6 @@ describe("history and run routes", () => {
   it("renders structured wide history rows without pipe-delimited labels", async () => {
     const app = render(
       <HistoryScreen
-        onOpenRun={() => {}}
         loadEntries={async () => createHistoryEntries()}
         terminalWidth={120}
       />
@@ -60,7 +60,6 @@ describe("history and run routes", () => {
   it("renders compact readable history rows in narrow terminals", async () => {
     const app = render(
       <HistoryScreen
-        onOpenRun={() => {}}
         loadEntries={async () => createHistoryEntries()}
         terminalWidth={48}
       />
@@ -80,12 +79,17 @@ describe("history and run routes", () => {
     app.unmount();
   });
 
-  it("opens the selected history run after keyboard navigation", async () => {
-    const onOpenRun = vi.fn();
+  it("opens the selected history run snapshot after keyboard navigation", async () => {
+    const openSnapshot = vi.fn().mockResolvedValue(
+      createOpenRunSnapshotResult({
+        runId: "run-2",
+        opened: true
+      })
+    );
     const app = render(
       <HistoryScreen
-        onOpenRun={onOpenRun}
         loadEntries={async () => createHistoryEntries()}
+        openSnapshot={openSnapshot}
         terminalWidth={120}
       />
     );
@@ -96,8 +100,36 @@ describe("history and run routes", () => {
     app.stdin.write("\r");
     await flushInk();
 
-    expect(onOpenRun).toHaveBeenCalledTimes(1);
-    expect(onOpenRun).toHaveBeenCalledWith("run-2");
+    expect(openSnapshot).toHaveBeenCalledTimes(1);
+    expect(openSnapshot).toHaveBeenCalledWith("run-2");
+    expect(app.lastFrame()).toContain("Opened run snapshot in browser.");
+    expect(app.lastFrame()).toContain("file:///tmp/run-2.html");
+
+    app.unmount();
+  });
+
+  it("reports snapshot generation progress and manual browser fallback", async () => {
+    const openSnapshot = vi.fn().mockResolvedValue(
+      createOpenRunSnapshotResult({
+        runId: "run-1",
+        opened: false
+      })
+    );
+    const app = render(
+      <HistoryScreen
+        loadEntries={async () => createHistoryEntries()}
+        openSnapshot={openSnapshot}
+        terminalWidth={120}
+      />
+    );
+    await flushInk();
+
+    app.stdin.write("\r");
+    await flushInk();
+
+    expect(app.lastFrame()).toContain("Snapshot generated. Open it manually:");
+    expect(app.lastFrame()).toContain("file:///tmp/run-1.html");
+    expect(app.lastFrame()).toContain("no browser");
 
     app.unmount();
   });
@@ -286,6 +318,25 @@ function createHistoryEntries(): readonly HistoryEntry[] {
       title: "Failed Revision"
     }
   ];
+}
+
+function createOpenRunSnapshotResult(input: {
+  opened: boolean;
+  runId: string;
+}): OpenRunSnapshotResult {
+  return {
+    runId: input.runId,
+    snapshotFile: `/tmp/${input.runId}.html`,
+    snapshotUrl: `file:///tmp/${input.runId}.html`,
+    browser: input.opened
+      ? {
+          opened: true
+        }
+      : {
+          opened: false,
+          message: "no browser"
+        }
+  };
 }
 
 function createRunSetupSnapshot(): RunSetupSnapshot {

@@ -4,6 +4,11 @@ import path from "node:path";
 import type { Command } from "commander";
 
 import { resolveUraniborgPaths } from "../../config/index.js";
+import {
+  openRunSnapshot,
+  type HistoryViewerDependencies,
+  type OpenRunSnapshotResult
+} from "../../history-viewer/index.js";
 import { readRunManifest, type RunManifest } from "../../run/index.js";
 import { writeInfo } from "../../ui/output.js";
 
@@ -14,6 +19,11 @@ export interface HistoryCommandDependencies {
   readManifest?: typeof readRunManifest;
   resolvePaths?: typeof resolveUraniborgPaths;
   writeLine?: (message: string) => void;
+  viewer?: HistoryViewerDependencies;
+  openRunSnapshot?: (
+    runId: string,
+    dependencies?: HistoryViewerDependencies
+  ) => Promise<OpenRunSnapshotResult>;
 }
 
 export interface HistoryEntry {
@@ -28,7 +38,13 @@ export function registerHistoryCommand(program: Command): void {
   program
     .command("history")
     .description("List prior Uraniborg runs.")
-    .action(async () => {
+    .option("--web <runId>", "Open a selected run as a local HTML snapshot.")
+    .action(async (options: { web?: string }) => {
+      if (options.web !== undefined) {
+        await runHistoryWebCommand(options.web);
+        return;
+      }
+
       await runHistoryCommand();
     });
 }
@@ -47,6 +63,33 @@ export async function runHistoryCommand(
   for (const entry of entries) {
     writeLine(formatHistoryLine(entry));
   }
+}
+
+export async function runHistoryWebCommand(
+  runId: string,
+  dependencies: HistoryCommandDependencies = {}
+): Promise<OpenRunSnapshotResult> {
+  const writeLine = dependencies.writeLine ?? writeInfo;
+  const openSnapshot = dependencies.openRunSnapshot ?? openRunSnapshot;
+  const result = await openSnapshot(runId, {
+    ...dependencies.viewer,
+    ...(dependencies.resolvePaths === undefined
+      ? {}
+      : {
+          resolvePaths: dependencies.resolvePaths
+        })
+  });
+
+  writeLine(`Generated run snapshot: ${result.snapshotFile}`);
+
+  if (result.browser.opened) {
+    writeLine(`Opened run snapshot: ${result.snapshotUrl}`);
+  } else {
+    writeLine(`Open manually: ${result.snapshotUrl}`);
+    writeLine(`Browser launch failed: ${result.browser.message}`);
+  }
+
+  return result;
 }
 
 export async function collectHistoryEntries(

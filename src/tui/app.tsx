@@ -126,17 +126,7 @@ export function UraniborgTuiApp(props: {
       case "revision-setup":
         return <RevisionSetupScreen />;
       case "history":
-        return (
-          <HistoryScreen
-            onOpenRun={(runId) => {
-              setRoute({
-                kind: "run-detail",
-                runId,
-                resumeRequested: false
-              });
-            }}
-          />
-        );
+        return <HistoryScreen />;
       case "run-detail":
         return (
           <RunDetailScreen
