@@ -1,5 +1,7 @@
 # Uraniborg
 
+![Uraniborg Welcome Screen](welcome_ui.png)
+
 Uraniborg is a local-first CLI for turning a Markdown research draft into a disciplined peer-review and revision loop.
 
 Researchers rarely publish the first version of an idea. They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. Uraniborg makes that loop explicit with LLMs: one model reviews the draft, another model refines it, and a memory layer preserves the decisions that should survive future iterations.
