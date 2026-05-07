@@ -1,217 +1,117 @@
 # Uraniborg
 
-Uraniborg is a local-first CLI for deterministic draft improvement loops.
+Uraniborg is a local-first CLI for turning a Markdown research draft into a disciplined peer-review and revision loop.
 
-It takes a Markdown research draft, runs an independent review pass, revises the draft against that review, records structured memory about what changed, and repeats for a fixed number of iterations.
-
-Core loop:
+Researchers rarely publish the first version of an idea. They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. Uraniborg makes that loop explicit with LLMs: one model reviews the draft, another model refines it, and a memory layer preserves the decisions that should survive future iterations.
 
 ```text
-draft -> peer review -> refinement -> memory update -> repeat -> final draft
+draft -> review -> refine -> remember -> repeat -> final draft
 ```
-
-## Status
-
-The v1 implementation is complete against the locked OpenSpec change and the canonical specs now live under:
-
-- [openspec/specs/environment-setup/spec.md](openspec/specs/environment-setup/spec.md)
-- [openspec/specs/model-selection/spec.md](openspec/specs/model-selection/spec.md)
-- [openspec/specs/iterative-draft-run/spec.md](openspec/specs/iterative-draft-run/spec.md)
-- [openspec/specs/run-recovery-and-history/spec.md](openspec/specs/run-recovery-and-history/spec.md)
-
-Automated validation is in place, but live UAT against a real external Feynman runtime and real provider credentials is still required.
-
-## What The CLI Supports
-
-The current CLI surface is:
-
-- `init`
-  - configure Uraniborg-owned refinement settings
-- `doctor`
-  - validate environment readiness
-- `models`
-  - inspect review and refine model availability
-- `run <file>`
-  - create and execute a new run
-- `resume <run-id>`
-  - resume an interrupted run
-- `history`
-  - list prior runs
-
-## Project Layout
-
-- `src/`
-  - CLI, orchestration, review, refine, memory, config, and run state code
-- `tests/`
-  - automated unit and smoke coverage
-- `openspec/specs/`
-  - canonical locked specs
-- `openspec/changes/archive/2026-04-24-build-uraniborg-v1/`
-  - archived implementation change record
-- `notes/uraniborg-v1-uat-plan.md`
-  - structured UAT plan
-- `notes/uraniborg-v1-uat-instructions.md`
-  - step-by-step UAT execution guide
-
-## Requirements
-
-- Node.js `>= 20`
-- npm
-- a compatible external Feynman installation available as `feynman` on `PATH`
-- credentials for the Uraniborg-owned refine endpoint you configure during `init`
-
-Uraniborg does not bundle, provision, or own Feynman. Install or expose Feynman separately before running review-dependent commands.
 
 ## Install
 
-Install the CLI from npm:
-
 ```bash
-npm install -g uraniborg
+npm install -g @perpetual-lm/uraniborg
 ```
 
-Then check the local environment:
+Uraniborg uses Feynman as its review-side runtime. Install it separately:
+
+```bash
+npm install -g @companion-ai/feynman@latest
+```
+
+Then verify the local environment:
 
 ```bash
 uraniborg doctor
 ```
 
-If Feynman is missing or incompatible, `uraniborg doctor`, `uraniborg models`, and run preflight report prerequisite guidance. Review-model, AlphaXiv, and web-search setup problems remain Feynman readiness issues; they are reported separately from Feynman compatibility.
+## Why Uraniborg?
 
-## Local Development
+A serious research revision loop has two failure modes:
 
-Install dependencies:
+- The draft is not challenged hard enough.
+- Later revisions accidentally undo earlier decisions.
 
-```bash
-npm install
-```
+Uraniborg is opinionated around both problems. It separates review from refinement, records each iteration as local artifacts, and maintains an Information Highway: a running memory of accepted changes, unresolved tensions, and course corrections. The goal is not to make a draft longer. The goal is to make the argument harder to break.
 
-Validate the codebase:
+## How It Works
 
-```bash
-npm run validate
-```
+### Review
 
-Build the project:
+Feynman reads the current draft and produces a structured critique: weak claims, missing evidence, unclear framing, and places where the argument should be challenged.
 
-```bash
-npm run build
-```
+### Refine
 
-Run the built CLI locally:
+Uraniborg sends the draft, the review, and the accumulated memory to the configured revision model. The refiner updates the draft while respecting decisions from prior iterations.
 
-```bash
-node dist/cli/main.js --help
-```
+### Remember
+
+After each iteration, Uraniborg carries forward the important decisions from the review and refinement. This is the anti-regression layer: the next pass should not rediscover the same critique, undo a defensible correction, or lose track of unresolved tensions.
+
+### Inspect
+
+History is available from the terminal, and a selected run can be opened as a local HTML reader for deeper review.
 
 ## Quickstart
 
-1. Install the CLI:
-
-```bash
-npm install -g uraniborg
-```
-
-2. Check prerequisites:
-
-```bash
-uraniborg doctor
-```
-
-3. Configure refinement:
+Configure Uraniborg:
 
 ```bash
 uraniborg init
 ```
 
-4. Check model availability:
+Check review and revision model readiness:
 
 ```bash
 uraniborg models
 ```
 
-5. Run a draft:
+Run one review/refinement iteration on a Markdown draft:
 
 ```bash
 uraniborg run path/to/draft.md --iterations 1
 ```
 
-6. Inspect prior runs:
+List previous runs:
 
 ```bash
 uraniborg history
 ```
 
-7. Resume an interrupted run:
+Open a selected run in the browser:
+
+```bash
+uraniborg history --web <run-id>
+```
+
+Resume an interrupted run:
 
 ```bash
 uraniborg resume <run-id>
 ```
 
-## Source Checkout Quickstart
+## What You Get
 
-1. Build the CLI from source:
+Each run gives you a durable trail of the draft's evolution:
 
-```bash
-npm run build
-```
+- the original draft
+- the critique for each iteration
+- the refined draft for each iteration
+- the final refined draft
+- a browser reader for reviewing one run without terminal clutter
 
-2. Configure refinement:
+The important point is continuity. Uraniborg does not treat each revision as a fresh rewrite; it preserves the context needed to make later revisions build on earlier ones.
 
-```bash
-node dist/cli/main.js init
-```
+## Requirements
 
-3. Check readiness:
+- Node.js `>= 20`
+- npm
+- `feynman` available on `PATH`
+- revision-provider credentials configured through `uraniborg init`
 
-```bash
-node dist/cli/main.js doctor
-node dist/cli/main.js models
-```
+Uraniborg does not bundle or own Feynman. Review-side provider setup, AlphaXiv access, and web-search readiness remain Feynman responsibilities; Uraniborg reports those readiness states through `doctor` and `models`.
 
-4. Run a draft:
+## Gratitude
 
-```bash
-node dist/cli/main.js run path/to/draft.md --iterations 1
-```
-
-5. Inspect prior runs:
-
-```bash
-node dist/cli/main.js history
-```
-
-6. Resume an interrupted run:
-
-```bash
-node dist/cli/main.js resume <run-id>
-```
-
-## Run Artifacts
-
-Uraniborg stores app state under `~/.uraniborg/`.
-
-Each run persists local artifacts including:
-
-- `run.json`
-- `config.snapshot.json`
-- `original.md`
-- `current.md`
-- `final.md`
-- `information-highway.md`
-- `iter-N/input.md`
-- `iter-N/review.md`
-- `iter-N/refined.md`
-- `iter-N/changes.md`
-- per-step logs
-
-## UAT
-
-For structured acceptance testing:
-
-- read the plan: [notes/uraniborg-v1-uat-plan.md](notes/uraniborg-v1-uat-plan.md)
-- follow the execution guide: [notes/uraniborg-v1-uat-instructions.md](notes/uraniborg-v1-uat-instructions.md)
-
-## Packaging
-
-Production builds emit the CLI entrypoint at `dist/cli/main.js`, matching the npm `bin` contract. The npm package is allowlist-based and ships only `dist/**`, `package.json`, `README.md`, and `LICENSE`.
+Uraniborg exists because of [Feynman](https://www.feynman.is/) and [Pi](https://pi.dev/). Their work provides the foundation that makes this project possible.
