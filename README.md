@@ -43,19 +43,19 @@ Uraniborg is opinionated around both problems. It completely decouples review fr
 
 ## How It Works
 
-### Review
+### 📖 Review
 
 Feynman reads the current draft and produces a structured critique: weak claims, missing evidence, unclear framing, and places where the argument should be challenged.
 
-### Refine
+### 🏛️ Refine
 
 Uraniborg sends the draft, the review, and the accumulated memory to the configured revision model. The refiner updates the draft while respecting decisions from prior iterations.
 
-### Remember
+### 🧠 Remember
 
 After each iteration, Uraniborg carries forward the important decisions from the review and refinement. This is the anti-regression layer: the next pass should not rediscover the same critique, undo a defensible correction, or lose track of unresolved tensions.
 
-### Inspect
+### 🔎 Inspect
 
 History is available from the terminal, and a selected run can be opened as a local HTML reader for deeper review.
 
