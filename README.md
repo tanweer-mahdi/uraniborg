@@ -4,9 +4,9 @@
 
 Researchers rarely publish the first version of an idea.
 
-They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. This workflow is battle-tested, but the bottleneck is simple. _It is not scalable_. 
+They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. This workflow is battle-tested, but the bottleneck is simple. _It is not scalable_. Outside academia, this collaborative hardening of a research idea rarely tracks. 
 
-Uraniborg provides a reasonable proxy workflow by providing an agentic harness: a set of deep research agents review an idea, spawn web search, and conduct lit review in `alphaXiv`. A separate `revision` model refines the idea based on the critique it was handed to by the deep research agents. An over-arching memory layer preserves the decisions that should survive future iterations and prevent unintended regressions.
+Uraniborg provides a reasonable proxy of this workflow by providing some agentic harness: a set of deep research agents that review an idea, spawn web search, and conduct lit review in `alphaXiv`. A separate `revision` model refines the idea based on the critique it was handed to by the deep research agents. An over-arching memory layer preserves the decisions that should survive future iterations and prevent unintended regressions.
 
 TLDR: Uraniborg is a local-first CLI for turning a Markdown research draft into a disciplined peer-review and revision loop.
 
@@ -34,7 +34,7 @@ uraniborg doctor
 
 ## Why Uraniborg?
 
-In a lot of cases, you simply cannot manifest a focused, human-driven peer-review process. That's where we lose our lightbulb moments. We burn midnight fuel with a chatting agent with some arbitrary prompts, and before you know anything - you have filled yours and the LLM's context with noise.  
+In a lot of cases, you simply cannot manifest a focused, human-driven peer-review process. We burn midnight fuel with a chatting agent with some arbitrary prompts to validate our research ideas, and before we know anything - both our and the LLMs context window is bloated with derailed discussion, hypoerbolic conjectures and noise. That's where we lose our lightbulb moments.  
 
 To formalize, a serious research revision loop has two failure modes:
 
