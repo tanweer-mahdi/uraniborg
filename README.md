@@ -8,7 +8,7 @@ They submit a draft, receive hard objections, revise the argument, defend what s
 
 Uraniborg provides a reasonable proxy of this workflow by providing some agentic harness: a set of deep research agents that review an idea, spawn web search, and conduct lit review in `alphaXiv`. A separate `revision` model refines the idea based on the critique it was handed to by the deep research agents. An over-arching memory layer preserves the decisions that should survive future iterations and prevent unintended regressions.
 
-TLDR: Uraniborg is a local-first CLI for turning a Markdown research draft into a disciplined peer-review and revision loop.
+TLDR: Uraniborg is a local-first CLI for refining and enriching Markdown research drafts via iterative and disciplined peer-review <-> revision loop.
 
 ```text
 draft -> review -> refine -> remember -> repeat -> final draft
