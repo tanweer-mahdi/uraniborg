@@ -2,9 +2,11 @@
 
 ![Uraniborg Welcome Screen](welcome_ui.png)
 
-Uraniborg is a local-first CLI for turning a Markdown research draft into a disciplined peer-review and revision loop.
+Researchers rarely publish the first version of an idea.
 
-Researchers rarely publish the first version of an idea. They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. Uraniborg makes that loop explicit with LLMs: one model reviews the draft, another model refines it, and a memory layer preserves the decisions that should survive future iterations.
+They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. Uraniborg makes that loop explicit by providing an agentic harness over this loop: a set of deep research agents review the draft by spawing websearch, researching `alphaXiv` for latest materials etc. A separate `revision` model refines the draft based on the critique it was handed to by the deep research agents. An over-arching memory layer preserves the decisions that should survive future iterations and preventing unintended regressions.
+
+TLDR: Uraniborg is a local-first CLI for turning a Markdown research draft into a disciplined peer-review and revision loop.
 
 ```text
 draft -> review -> refine -> remember -> repeat -> final draft
@@ -16,7 +18,7 @@ draft -> review -> refine -> remember -> repeat -> final draft
 npm install -g @perpetual-lm/uraniborg
 ```
 
-Uraniborg uses Feynman as its review-side runtime. Install it separately:
+Uraniborg uses Feynman as its review-side backend and is built on top of it. Install it separately:
 
 ```bash
 npm install -g @companion-ai/feynman@latest
@@ -30,28 +32,30 @@ uraniborg doctor
 
 ## Why Uraniborg?
 
-A serious research revision loop has two failure modes:
+In a lot of cases, you simply cannot manifest a focused, human-driven peer-review process. That's where we lose our lightbulb moments. We burn midnight fuel with a chatting agent with some arbitrary prompts, and before you know anything - you have filled yours and the LLM's context with noise.  
+
+To formalize, a serious research revision loop has two failure modes:
 
 - The draft is not challenged hard enough.
 - Later revisions accidentally undo earlier decisions.
 
-Uraniborg is opinionated around both problems. It separates review from refinement, records each iteration as local artifacts, and maintains an Information Highway: a running memory of accepted changes, unresolved tensions, and course corrections. The goal is not to make a draft longer. The goal is to make the argument harder to break.
+Uraniborg is opinionated around both problems. It completely decouples review from refinement thus removing any bias, records each iteration as local artifacts, and maintains an Information Highway: a running memory of accepted changes, unresolved challenges, and course corrections. The goal is not to make a draft longer. The goal is to make the argument harder to break.
 
 ## How It Works
 
-### Review
+### 📖 Review
 
 Feynman reads the current draft and produces a structured critique: weak claims, missing evidence, unclear framing, and places where the argument should be challenged.
 
-### Refine
+### 🏛️ Refine
 
 Uraniborg sends the draft, the review, and the accumulated memory to the configured revision model. The refiner updates the draft while respecting decisions from prior iterations.
 
-### Remember
+### 🧠 Remember
 
 After each iteration, Uraniborg carries forward the important decisions from the review and refinement. This is the anti-regression layer: the next pass should not rediscover the same critique, undo a defensible correction, or lose track of unresolved tensions.
 
-### Inspect
+### 🔎 Inspect
 
 History is available from the terminal, and a selected run can be opened as a local HTML reader for deeper review.
 
