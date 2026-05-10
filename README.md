@@ -4,7 +4,9 @@
 
 Researchers rarely publish the first version of an idea.
 
-They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. Uraniborg makes that loop explicit by providing an agentic harness over this loop: a set of deep research agents review the draft by spawing websearch, researching `alphaXiv` for latest materials etc. A separate `revision` model refines the draft based on the critique it was handed to by the deep research agents. An over-arching memory layer preserves the decisions that should survive future iterations and preventing unintended regressions.
+They submit a draft, receive hard objections, revise the argument, defend what should not change, and repeat until the work is stronger. This workflow is battle-tested, but the bottleneck is simple. _It is not scalable_. 
+
+Uraniborg provides a reasonable proxy workflow by providing an agentic harness: a set of deep research agents review an idea, spawn web search, and conduct lit review in `alphaXiv`. A separate `revision` model refines the idea based on the critique it was handed to by the deep research agents. An over-arching memory layer preserves the decisions that should survive future iterations and prevent unintended regressions.
 
 TLDR: Uraniborg is a local-first CLI for turning a Markdown research draft into a disciplined peer-review and revision loop.
 
